@@ -4,9 +4,9 @@ import numpy as np
 import folium
 from streamlit_folium import st_folium
 
-st.set_page_config(page_title="AI Accessibility Route Planner V5.3", layout="wide")
+st.set_page_config(page_title="AI Accessibility Route Planner V5.4", layout="wide")
 st.title("♿ AI Accessibility Route Planner (Wheelshare)")
-st.subheader("ระบบวางแผนเส้นทางอัจฉริยะ (เวอร์ชันเน้นสถานที่หลัก และแนะนำทุกสายรถเมล์ที่ผ่านร่วมกัน)")
+st.subheader("ระบบวางแผนเส้นทางอัจฉริยะ (เวอร์ชันแก้ไของค์ประกอบโค้ดและแสดงสายรถเมล์ร่วม)")
 st.write("---")
 
 def haversine_distance(lat1, lon1, lat2, lon2):
@@ -19,13 +19,11 @@ def haversine_distance(lat1, lon1, lat2, lon2):
 
 @st.cache_data
 def load_and_prepare_data():
-    # โหลดไฟล์ข้อมูล
     df_places = pd.read_csv('bangkok_places_bus_spot.csv')
     df_stations = pd.read_csv('bts_station.csv')
     df_accessibility = pd.read_csv('BTS for wheelchair users spreadsheet - BTS green line.csv')
     df_bus_routes = pd.read_csv('ThaiSmalieBus  - Sheet1.csv')
     
-    # ทำความสะอาดข้อมูล BTS
     df_stations['clean_name'] = df_stations['name'].str.replace('สถานี', '').str.strip()
     df_accessibility['clean_name'] = df_accessibility['สถานี'].str.replace('สถานี', '').str.strip()
     df_bts_master = pd.merge(
@@ -34,8 +32,7 @@ def load_and_prepare_data():
         on='clean_name', how='inner'
     ).drop_duplicates(subset=['clean_name']).reset_index(drop=True)
     
-    # 🎯 [ลอจิกคัดกรอง] กรองเอาป้ายรถเมล์ย่อยๆ ออกจาก Dropdown (คงไว้เฉพาะสถานที่หลักและโรงพยาบาล)
-    # โดยคัดกรองแถวที่มีรหัสสายรถเมล์ชานต่ำ เช่น 1-1, 1-13 หรือคำว่า สถานีรถไฟ ออกไป เพื่อความสะอาดตา
+    # กรองเอาเฉพาะสถานที่หลักมาทำตัวเลือกใน Dropdown เท่านั้นตามที่คุณสั่ง
     df_clean_places = df_places[
         ~df_places['place_name'].str.contains(r'\d-\d', regex=True) & 
         ~df_places['place_name'].str.contains('สถานีรถไฟ|หมู่บ้าน|ตลาดยิ่งเจริญ', na=False)
@@ -53,7 +50,6 @@ except Exception as e:
 st.sidebar.header("🕹️ เมนูเลือกการเดินทาง")
 place_list = sorted(df_places['place_name'].tolist())
 
-# กำหนดจุดเริ่มต้นและปลายทางเริ่มต้นให้ใช้งานง่าย
 default_start = place_list.index("Victory Monument") if "Victory Monument" in place_list else 0
 hospital_options = [x for x in place_list if any(h in x.lower() for h in ["โรงพยาบาล", "รพ.", "hospital"])]
 default_end = place_list.index(hospital_options[0]) if hospital_options else 0
@@ -102,11 +98,10 @@ with col1:
         
         st.info(f"**🔴 ขั้นที่ 3:** {transport_last_leg} จากสถานีปลายทางเข้าสู่เป้าหมาย **{end_place_name}** (ระยะทาง {nearest_bts_end['dist_end']:.1f} เมตร)")
 
-    # 🎯 OPTION 2: รถเมล์ชานต่ำ (แนะนำทุกสายที่ผ่านร่วมกันอัตโนมัติ)
+    # 🎯 OPTION 2: รถเมล์ชานต่ำ (แก้ไข Syntax Error เรียบร้อย)
     elif "🚌" in travel_mode:
         st.markdown("#### 🚏 สายรถเมล์ไทยสมายล์บัสที่ผ่านเส้นทางของคุณ")
         
-        # Dictionary แปลงคีย์เวิร์ดเพื่อค้นหากลุ่มคำภาษาไทยในไฟล์เส้นทางวิ่ง
         translation_dict = {
             "Victory Monument": ["อนุสาวรีย์", "รพ.ราชวิถี", "ราชวิถี"],
             "Chulalongkorn Hospital": ["จุฬาลงกรณ์", "สามย่าน", "รพ.จุฬา"],
@@ -122,7 +117,6 @@ with col1:
         start_keywords = translation_dict.get(start_place_name, [start_place_name])
         end_keywords = translation_dict.get(end_place_name, [end_place_name])
         
-        # ลอจิกค้นหาสายรถเมล์ที่ผ่านร่วมกัน
         matched_lines = []
         for idx, row in df_bus_routes.iterrows():
             route_text = str(row['ต้นทาง']) + str(row['ปลาย']) + str(row['ผ่าน'])
@@ -130,11 +124,9 @@ with col1:
             match_start = any(k.lower() in route_text.lower() for k in start_keywords)
             match_end = any(k.lower() in route_text.lower() for k in end_keywords)
             
-            # ⚡ ตรงตามเงื่อนไขที่คุณต้องการ: ถ้าผ่านร่วมกันทั้งสองจุด ให้เก็บสายนี้ไว้
             if match_start and match_end:
                 matched_lines.append(row['สาย'])
                 
-        # ถ้าหาเส้นทางตรงแบบสายเดียวไม่เจอ ให้ค้นหาสายที่ผ่านใกล้เคียงมาแสดง
         if not matched_lines:
             for idx, row in df_bus_routes.iterrows():
                 route_text = str(row['ต้นทาง']) + str(row['ปลาย']) + str(row['ผ่าน'])
@@ -142,9 +134,50 @@ with col1:
                     matched_lines.append(row['สาย'])
 
         if matched_lines:
-            # นำสายรถเมล์ที่ได้มาลบตัวซ้ำ และรวมเป็นข้อความเดียวกันเพื่อแสดงผลพร้อมกัน
             unique_lines_list = sorted(list(set(matched_lines)))
             all_suggested_lines = " หรือ ".join(unique_lines_list)
+            first_bus = unique_lines_list[0]
             
             st.success(f"✅ **AI ตรวจพบสายรถเมล์ชานต่ำที่ผ่านร่วมกัน: สาย {all_suggested_lines}**")
             st.markdown(f"""
+            **📋 แนะนำขั้นตอนเดินทางสำหรับผู้ใช้วีลแชร์:**
+            1. **🚶 จุดขึ้นรถ:** เข็นวีลแชร์ไปยังจุดจอดรถ ณ **{start_place_name}**
+            2. **💳 รอรถเมล์:** คุณสามารถเลือกขึ้นรถเมล์สาย **{first_bus}** หรือสายอื่น ๆ ที่ระบุข้างต้นได้ทั้งหมด (เป็นรถชานต่ำ Low-Floor มีแรมป์ทางลาดและพื้นที่ล็อกล้อวีลแชร์อย่างปลอดภัย ค่าบริการ 20 บาทตลอดสาย)
+            3. **🏁 จุดลงรถ:** นั่งยาวไปลงที่จุดจอดรถ ณ เป้าหมาย **{end_place_name}** ได้อย่างปลอดภัย
+            """)
+        else:
+            st.warning("ℹ️ ไม่พบสายรถเมล์ตรงในระบบที่เชื่อมระหว่างสองจุดนี้โดยตรง")
+            st.write("แนะนำให้เปลี่ยนไปใช้งานโหมด **รถไฟฟ้า (BTS)** เพื่อการเดินทางด้วยระบบลิฟต์อารยสถาปัตย์ที่สะดวกกว่าครับ")
+
+    # 🎯 OPTION 3: สวัสดิการรถตู้จากรัฐ
+    elif "🏥" in travel_mode:
+        if is_hospital:
+            st.warning("🏥 **ยืนยันสิทธิ์สวัสดิการรับ-ส่งสถานพยาบาลสำเร็จ**")
+            st.markdown(f"""
+            เนื่องจากปลายทางของคุณคือ **{end_place_name}** คุณสามารถใช้สิทธิ์เรียกรถรับ-ส่งฟรีสำหรับผู้พิการได้:
+            * 📞 **บริการรถตู้ กทม. (วีลแชร์):** โทรนัดหมายล่วงหน้าได้ที่ **สายด่วน กทม. โทร. 1555** หรือ **1479**
+            * 🚑 **บริการรถรับส่ง สปสช.:** สำหรับไปโรงพยาบาลรัฐตามสิทธิ์ โทรติดต่อที่ **สายด่วน 1330**
+            """)
+        else:
+            st.error("❌ เงื่อนไขไม่ตรงตามเกณฑ์สวัสดิการ")
+            st.write(f"สวัสดิการรถตู้รับ-ส่งฟรี จะจำกัดสิทธิ์เฉพาะการเดินทางไป **โรงพยาบาล** เท่านั้น แต่ปัจจุบันคุณเลือกปลายทางเป็น *{end_place_name}*")
+
+with col2:
+    st.markdown("### 🗺️ แผนที่ระบุพิกัดและแนวเส้นทางเดินรถ")
+    m = folium.Map(location=[(start_info['latitude'] + end_info['latitude'])/2, (start_info['longitude'] + end_info['longitude'])/2], zoom_start=12)
+    
+    folium.Marker([start_info['latitude'], start_info['longitude']], popup=f"ต้นทาง: {start_place_name}", icon=folium.Icon(color='orange', icon='play', prefix='fa')).add_to(m)
+    folium.Marker([end_info['latitude'], end_info['longitude']], popup=f"ปลายทาง: {end_place_name}", icon=folium.Icon(color='green', icon='flag', prefix='fa')).add_to(m)
+    
+    if "🚇" in travel_mode:
+        folium.Marker([nearest_bts_start['lat'], nearest_bts_start['lng']], popup=f"BTS ต้นทาง", icon=folium.Icon(color='blue', icon='train', prefix='fa')).add_to(m)
+        folium.Marker([nearest_bts_end['lat'], nearest_bts_end['lng']], popup=f"BTS ปลายทาง", icon=folium.Icon(color='blue', icon='train', prefix='fa')).add_to(m)
+        folium.PolyLine([[nearest_bts_start['lat'], nearest_bts_start['lng']], [nearest_bts_end['lat'], nearest_bts_end['lng']]], color='blue', weight=6).add_to(m)
+
+    elif "🚌" in travel_mode:
+        folium.PolyLine([[start_info['latitude'], start_info['longitude']], [end_info['latitude'], end_info['longitude']]], color='purple', weight=5, dash_array='5, 5').add_to(m)
+
+    elif "🏥" in travel_mode and is_hospital:
+        folium.PolyLine([[start_info['latitude'], start_info['longitude']], [end_info['latitude'], end_info['longitude']]], color='cadetblue', weight=6).add_to(m)
+
+    st_folium(m, width="100%", height=580)
