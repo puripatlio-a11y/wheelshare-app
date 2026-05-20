@@ -1,0 +1,301 @@
+Route,Transport_Type,Elevator,Ramp,Accessible_Exit,Cost,Travel_Time,BusSupport,Safety,Crowded_Level,Urgency,Prefer_Safe,Prefer_Cheap,Recommended
+Siam→Asok,BTS,1,1,1,23,58,0,5,1,1,0,0,1
+Siam→Asok,MRT,1,1,1,62,56,0,5,4,0,1,1,1
+Siam→Chitlom,MRT,1,1,1,65,36,0,1,1,1,0,1,1
+Asok→Lat Phrao,BTS+MRT,1,1,1,24,39,0,1,5,1,1,0,1
+Siam→Asok,BTS,1,0,0,31,70,0,1,4,1,1,1,0
+Siam→Kasetsart,Bus,1,1,1,21,53,1,2,5,0,0,1,1
+Ari→Siam,Bus,0,1,1,20,29,1,1,3,1,1,0,1
+Bang Wa→Siam,BTS+MRT,0,1,1,42,56,0,4,2,1,0,0,1
+National Stadium→Mo Chit,BTS+MRT,1,1,0,42,38,0,2,2,1,0,0,1
+Siam→Asok,MRT,1,0,1,21,39,0,4,5,1,1,0,1
+Siam→Asok,BTS+MRT,1,0,1,35,42,0,2,4,0,1,0,1
+National Stadium→Mo Chit,BTS,0,1,1,55,27,0,2,3,0,0,1,0
+Bearing→Siam,BTS,1,1,0,36,30,0,1,2,0,0,1,1
+Siam→Asok,BTS+MRT,1,1,1,52,25,0,3,5,1,0,0,1
+Mo Chit→Victory Monument,BTS+Bus,0,1,1,24,30,1,2,1,1,0,0,1
+On Nut→Kasetsart,MRT,1,1,1,21,17,0,3,1,0,1,1,1
+Bang Wa→Siam,BTS+MRT,1,0,1,47,30,0,4,4,0,0,0,1
+Ari→Siam,Bus,1,1,1,58,21,1,1,4,1,0,0,1
+Bang Wa→Siam,MRT,1,1,1,46,30,0,1,4,0,0,0,1
+Siam→Asok,MRT,1,1,1,42,18,0,2,4,0,1,1,1
+Bearing→Siam,Bus,1,0,0,62,46,1,2,2,1,0,0,0
+On Nut→Kasetsart,BTS+MRT,1,1,1,47,47,0,5,2,0,0,0,1
+Siam→Asok,BTS+MRT,1,0,1,53,30,0,5,5,0,0,1,1
+On Nut→Kasetsart,BTS+MRT,1,0,1,62,35,0,2,3,1,0,1,1
+Bearing→Siam,Bus,0,0,1,53,21,1,1,5,0,1,0,0
+Asok→Lat Phrao,BTS,0,1,1,51,60,0,3,5,0,1,0,1
+Siam→Kasetsart,Bus,1,1,1,55,28,1,3,2,1,1,1,1
+Siam→Chitlom,BTS,1,0,1,38,64,0,2,3,0,1,1,1
+National Stadium→Mo Chit,BTS,1,0,1,26,49,0,1,3,0,1,0,0
+Siam→Chitlom,Bus,1,0,0,39,28,1,2,1,1,1,0,1
+Bang Wa→Siam,MRT,0,0,0,18,26,0,3,4,0,1,0,1
+Siam→Asok,BTS+Bus,0,0,1,46,37,0,3,2,0,0,0,1
+Ari→Siam,Bus,1,1,1,49,40,1,5,3,0,0,1,1
+Siam→Kasetsart,BTS+MRT,0,1,1,44,37,0,3,4,0,1,0,1
+Mo Chit→Victory Monument,BTS,1,1,0,51,58,0,2,3,1,0,1,0
+On Nut→Kasetsart,Bus,1,1,0,59,41,1,3,4,1,0,0,1
+Ari→Siam,BTS+Bus,1,0,1,52,68,1,1,3,1,0,1,0
+On Nut→Kasetsart,BTS+MRT,1,1,1,30,47,0,4,2,0,1,1,1
+Siam→Asok,MRT,1,1,1,18,17,0,2,4,0,1,1,1
+On Nut→Kasetsart,MRT,1,1,1,26,56,0,1,1,1,0,0,0
+National Stadium→Mo Chit,BTS+Bus,1,1,1,46,57,1,5,5,1,1,1,1
+National Stadium→Mo Chit,BTS+Bus,0,1,1,32,68,1,3,5,1,0,1,1
+Bearing→Siam,BTS,1,1,1,51,20,0,2,2,0,1,0,1
+Bang Wa→Siam,BTS,1,1,1,20,28,0,4,4,0,1,1,1
+Siam→Chitlom,Bus,1,1,0,51,62,0,5,5,0,1,0,1
+Mo Chit→Victory Monument,BTS+Bus,1,1,1,63,25,0,4,2,0,1,0,1
+Siam→Asok,BTS+Bus,1,1,1,30,44,1,3,3,1,1,1,1
+Mo Chit→Victory Monument,BTS,1,1,1,39,29,0,1,1,0,0,0,1
+Siam→Chitlom,BTS+MRT,1,1,1,53,28,0,4,3,1,0,0,1
+Siam→Kasetsart,Bus,1,1,1,41,40,1,2,1,0,0,1,1
+On Nut→Kasetsart,BTS,1,1,1,51,42,0,3,1,1,0,1,1
+Bearing→Siam,BTS,1,1,0,46,60,0,2,4,0,1,1,1
+Bearing→Siam,BTS+Bus,0,1,1,22,32,1,4,2,1,1,1,1
+Siam→Chitlom,BTS+Bus,0,1,1,38,32,0,5,3,0,0,0,1
+Bang Wa→Siam,BTS+Bus,1,0,1,48,43,1,1,1,1,0,1,1
+Bang Wa→Siam,Bus,1,1,1,64,50,1,3,3,1,1,1,1
+Mo Chit→Victory Monument,MRT,1,1,1,51,63,0,2,2,0,1,1,1
+On Nut→Kasetsart,BTS+MRT,1,0,1,35,29,0,3,2,1,0,0,1
+Mo Chit→Victory Monument,BTS,0,1,1,25,55,0,4,1,0,1,1,1
+Bearing→Siam,BTS+Bus,1,0,1,24,67,0,1,4,1,0,0,0
+Siam→Kasetsart,MRT,0,0,1,32,22,0,5,4,0,1,1,1
+Bearing→Siam,Bus,0,0,1,56,62,1,1,2,0,1,0,0
+Siam→Kasetsart,MRT,1,1,1,45,59,0,5,4,1,0,0,1
+Mo Chit→Victory Monument,Bus,1,1,1,57,52,0,2,4,0,0,0,1
+Mo Chit→Victory Monument,MRT,1,1,1,64,67,0,5,3,1,0,1,1
+Mo Chit→Victory Monument,BTS+Bus,0,1,1,19,42,1,3,5,1,0,0,1
+Bang Wa→Siam,BTS+MRT,1,1,1,34,51,0,1,2,1,1,1,1
+Siam→Kasetsart,BTS+MRT,1,0,0,47,37,0,4,3,1,0,0,1
+Asok→Lat Phrao,BTS+Bus,1,1,0,52,17,0,4,1,1,1,1,1
+Siam→Asok,BTS+Bus,0,0,1,46,41,0,1,2,1,1,1,0
+Siam→Chitlom,MRT,1,1,1,61,46,0,1,1,0,0,1,0
+National Stadium→Mo Chit,BTS,1,1,0,24,44,0,1,2,1,1,1,1
+Ari→Siam,BTS+Bus,0,1,1,55,47,1,2,1,1,1,1,1
+National Stadium→Mo Chit,Bus,0,1,1,59,46,1,2,4,1,1,1,1
+National Stadium→Mo Chit,BTS+MRT,1,0,0,61,30,0,5,4,0,1,0,1
+Asok→Lat Phrao,BTS+Bus,1,0,1,58,24,1,4,1,0,1,0,1
+Bearing→Siam,BTS,1,1,1,43,70,0,2,1,1,1,1,1
+On Nut→Kasetsart,BTS+Bus,1,0,0,41,35,0,4,5,0,0,0,1
+Mo Chit→Victory Monument,MRT,1,1,1,57,60,0,1,4,0,1,0,0
+Siam→Chitlom,Bus,1,1,1,50,41,1,5,2,0,0,0,1
+On Nut→Kasetsart,BTS+Bus,1,1,0,46,55,1,3,4,1,0,1,1
+Mo Chit→Victory Monument,BTS+MRT,1,1,1,54,34,0,4,3,1,1,0,1
+Ari→Siam,BTS+Bus,1,1,1,61,33,1,1,4,1,0,0,1
+On Nut→Kasetsart,BTS+Bus,0,0,1,39,29,1,2,5,1,0,0,0
+Siam→Chitlom,Bus,1,1,1,35,35,1,4,2,0,0,1,1
+National Stadium→Mo Chit,BTS+MRT,0,0,1,47,66,0,3,3,0,1,0,1
+Siam→Kasetsart,MRT,0,1,0,52,38,0,1,4,0,1,0,0
+Bearing→Siam,Bus,1,1,1,40,21,0,2,4,0,1,0,1
+Siam→Asok,BTS+Bus,0,1,1,19,34,1,4,1,0,0,0,1
+Ari→Siam,BTS+Bus,1,0,1,54,62,1,2,4,0,1,1,1
+Mo Chit→Victory Monument,BTS,1,1,1,32,69,0,3,1,1,1,0,1
+Ari→Siam,Bus,1,1,1,59,28,1,5,1,0,1,0,1
+Siam→Kasetsart,BTS+MRT,1,0,1,54,28,0,2,3,0,0,1,1
+Siam→Kasetsart,MRT,1,0,1,18,23,0,1,3,0,1,0,1
+Siam→Kasetsart,Bus,1,1,1,47,43,0,3,5,0,1,0,1
+On Nut→Kasetsart,BTS,1,0,1,36,44,0,1,1,1,1,1,1
+Siam→Asok,BTS+Bus,1,1,0,26,19,1,2,3,1,1,1,1
+Bearing→Siam,BTS+MRT,1,1,1,58,56,0,5,2,1,1,0,1
+Ari→Siam,Bus,0,1,1,37,57,1,3,3,0,1,0,1
+Siam→Asok,BTS,1,1,1,25,50,0,1,5,1,0,1,1
+Asok→Lat Phrao,BTS+Bus,0,1,0,39,21,1,5,5,0,0,1,1
+Bang Wa→Siam,BTS,1,1,1,34,51,0,2,4,0,1,0,1
+Siam→Kasetsart,Bus,1,1,1,26,51,1,4,1,0,0,0,1
+National Stadium→Mo Chit,MRT,1,1,1,36,61,0,3,5,0,0,0,1
+Siam→Kasetsart,BTS+MRT,1,1,1,44,46,0,5,4,1,1,0,1
+National Stadium→Mo Chit,BTS,1,1,1,54,46,0,5,3,0,0,1,1
+On Nut→Kasetsart,BTS,1,1,1,25,63,0,3,3,1,0,0,1
+Bearing→Siam,BTS+Bus,1,1,1,59,66,1,3,1,1,0,1,1
+Siam→Chitlom,BTS+Bus,0,0,1,62,55,1,4,3,0,1,0,1
+Asok→Lat Phrao,MRT,0,1,1,40,20,0,4,1,0,1,1,1
+National Stadium→Mo Chit,BTS,1,1,1,38,64,0,2,1,0,0,1,1
+Asok→Lat Phrao,MRT,1,1,1,55,24,0,1,2,1,1,1,1
+On Nut→Kasetsart,BTS+MRT,1,0,1,45,19,0,4,4,1,1,0,1
+Asok→Lat Phrao,BTS+MRT,1,1,1,40,68,0,3,1,0,1,1,1
+On Nut→Kasetsart,BTS+MRT,0,1,1,53,56,0,2,3,1,0,0,0
+Bearing→Siam,BTS,0,0,0,22,47,0,2,1,0,1,1,0
+National Stadium→Mo Chit,BTS+MRT,1,1,0,41,41,0,3,5,0,1,0,1
+Asok→Lat Phrao,BTS,1,1,1,59,53,0,2,3,0,0,1,1
+Mo Chit→Victory Monument,BTS+Bus,1,1,1,58,65,1,3,2,0,1,1,1
+Siam→Chitlom,Bus,1,0,1,29,29,0,2,2,0,1,0,1
+National Stadium→Mo Chit,BTS+MRT,0,0,1,38,64,0,5,2,1,0,0,1
+Siam→Kasetsart,BTS+MRT,0,1,1,43,38,0,2,4,1,1,0,1
+National Stadium→Mo Chit,MRT,1,0,1,29,38,0,5,4,1,1,1,1
+National Stadium→Mo Chit,BTS+MRT,1,1,1,55,23,0,3,1,1,1,0,1
+National Stadium→Mo Chit,BTS,1,0,1,49,24,0,4,1,0,1,1,1
+Siam→Chitlom,BTS+Bus,1,1,1,40,29,0,1,3,0,1,0,1
+Siam→Kasetsart,BTS,1,0,1,25,63,0,4,4,0,0,0,1
+Mo Chit→Victory Monument,MRT,0,1,1,50,42,0,1,3,0,1,0,0
+Siam→Chitlom,MRT,1,0,1,24,68,0,4,5,0,0,0,1
+Mo Chit→Victory Monument,BTS+Bus,1,1,1,59,20,1,5,3,0,0,1,1
+Bearing→Siam,BTS,1,0,1,18,37,0,1,3,0,0,1,1
+Siam→Kasetsart,BTS,1,1,1,60,44,0,4,2,0,0,1,1
+Siam→Chitlom,Bus,1,0,0,36,47,1,4,5,1,1,0,1
+Bang Wa→Siam,Bus,1,0,0,24,66,1,3,4,1,1,1,1
+Asok→Lat Phrao,MRT,1,1,0,50,32,0,1,4,0,1,0,0
+National Stadium→Mo Chit,Bus,1,1,1,55,60,1,4,2,1,1,1,1
+Siam→Chitlom,Bus,1,1,1,20,19,0,4,3,0,0,0,1
+On Nut→Kasetsart,BTS+Bus,1,1,1,41,51,1,1,5,0,1,1,1
+Asok→Lat Phrao,BTS+Bus,1,1,1,58,32,1,2,1,0,0,1,1
+National Stadium→Mo Chit,BTS+Bus,0,1,1,30,54,0,3,4,0,0,0,1
+Siam→Asok,BTS+Bus,1,1,0,37,57,0,3,1,1,1,0,1
+Siam→Kasetsart,Bus,1,1,1,48,16,1,3,5,1,1,0,1
+On Nut→Kasetsart,BTS,1,1,1,47,48,0,4,4,0,0,1,1
+Siam→Asok,BTS+Bus,1,1,1,52,55,0,5,2,0,1,0,1
+Siam→Asok,BTS+MRT,1,1,1,62,29,0,3,5,1,0,1,1
+Bang Wa→Siam,BTS+MRT,1,1,1,22,47,0,2,5,0,0,1,1
+On Nut→Kasetsart,BTS,0,1,1,58,64,0,5,3,0,1,0,1
+Bearing→Siam,BTS+MRT,1,0,1,60,40,0,3,4,0,0,0,1
+Bearing→Siam,BTS+Bus,1,1,1,62,35,1,3,4,0,1,0,1
+Asok→Lat Phrao,MRT,1,1,1,23,18,0,3,4,1,0,0,1
+Asok→Lat Phrao,BTS+MRT,1,1,1,49,44,0,4,3,1,0,0,1
+Ari→Siam,BTS+MRT,1,1,1,20,18,0,3,4,1,1,0,1
+Siam→Asok,BTS+Bus,1,1,1,19,40,1,1,5,0,1,1,1
+Siam→Asok,BTS+Bus,1,0,1,60,54,0,1,2,0,1,1,0
+Asok→Lat Phrao,BTS+MRT,0,0,1,49,40,0,5,1,0,0,0,1
+Asok→Lat Phrao,BTS+Bus,1,1,0,56,35,1,2,4,1,1,1,1
+On Nut→Kasetsart,Bus,1,1,1,43,52,1,3,1,1,1,0,1
+Siam→Chitlom,BTS+MRT,1,1,1,41,24,0,2,1,0,0,0,1
+Bearing→Siam,Bus,1,1,1,56,45,1,1,2,0,1,1,1
+National Stadium→Mo Chit,BTS+Bus,1,1,0,39,58,1,3,5,1,0,0,1
+Mo Chit→Victory Monument,BTS+MRT,1,0,0,35,60,0,2,4,1,1,1,1
+National Stadium→Mo Chit,Bus,1,1,1,42,67,0,3,2,1,0,1,1
+Siam→Asok,Bus,0,1,1,51,32,1,5,3,0,0,0,1
+Bang Wa→Siam,BTS,1,1,1,20,21,0,4,3,1,0,0,1
+Siam→Chitlom,BTS+MRT,0,1,1,47,45,0,2,3,1,1,0,1
+Siam→Asok,BTS+MRT,1,1,0,19,26,0,4,2,0,1,1,1
+Siam→Kasetsart,Bus,0,1,1,38,33,1,4,5,1,0,1,1
+Mo Chit→Victory Monument,MRT,0,1,1,58,31,0,2,1,1,1,0,1
+Siam→Kasetsart,BTS+MRT,0,0,1,49,35,0,1,4,0,0,0,0
+Bearing→Siam,Bus,0,1,1,34,36,1,3,5,0,1,1,1
+Bang Wa→Siam,BTS,1,1,1,60,47,0,3,1,1,1,0,1
+Bang Wa→Siam,MRT,1,1,0,40,41,0,5,4,0,0,0,1
+National Stadium→Mo Chit,BTS+Bus,1,1,0,52,47,1,2,5,0,0,1,1
+National Stadium→Mo Chit,BTS+Bus,1,1,1,49,43,1,1,4,0,1,1,1
+On Nut→Kasetsart,BTS,1,1,1,18,40,0,3,1,0,0,0,1
+Ari→Siam,Bus,1,1,1,47,17,0,3,4,0,0,1,1
+Asok→Lat Phrao,BTS+Bus,1,0,1,59,70,1,5,2,1,0,0,1
+National Stadium→Mo Chit,BTS+Bus,1,1,1,18,34,1,4,5,1,1,0,1
+Bang Wa→Siam,BTS+Bus,1,1,0,24,17,0,4,5,0,0,0,1
+Siam→Asok,BTS,1,1,1,20,30,0,1,4,1,0,0,1
+Siam→Chitlom,MRT,1,1,1,63,51,0,3,5,1,0,1,1
+Siam→Kasetsart,BTS+MRT,1,1,1,54,62,0,2,4,1,0,1,0
+Ari→Siam,BTS+MRT,1,1,1,41,26,0,5,4,0,0,1,1
+Siam→Kasetsart,BTS+Bus,0,1,0,25,39,1,2,3,0,1,0,1
+Bearing→Siam,Bus,1,1,1,60,53,1,5,1,0,0,0,1
+Bearing→Siam,MRT,0,1,0,17,28,0,2,1,1,0,0,0
+Ari→Siam,MRT,1,0,1,51,56,0,3,3,1,1,1,1
+Bearing→Siam,BTS,0,1,1,37,28,0,3,3,1,0,0,1
+Siam→Kasetsart,BTS,1,0,1,43,33,0,2,2,1,0,1,1
+On Nut→Kasetsart,MRT,1,1,1,33,63,0,4,4,1,0,1,1
+Siam→Kasetsart,MRT,1,1,0,51,56,0,1,5,0,0,0,0
+Siam→Chitlom,BTS+Bus,1,1,1,30,47,1,4,3,0,1,1,1
+Siam→Chitlom,BTS,1,1,1,63,32,0,5,3,0,1,0,1
+Siam→Asok,BTS,1,1,1,33,67,0,3,3,1,0,1,1
+Ari→Siam,BTS+Bus,1,0,1,22,56,1,1,1,1,1,1,1
+National Stadium→Mo Chit,BTS+Bus,1,1,1,44,56,1,3,5,0,0,0,1
+Bang Wa→Siam,BTS+MRT,1,1,1,34,49,0,5,1,0,1,0,1
+Bang Wa→Siam,BTS+MRT,1,0,1,21,34,0,2,5,0,1,1,1
+Ari→Siam,MRT,1,1,1,64,37,0,1,1,1,0,0,1
+Asok→Lat Phrao,BTS+MRT,1,0,1,37,16,0,3,4,1,0,1,1
+National Stadium→Mo Chit,BTS+Bus,1,1,1,56,33,1,2,1,0,1,0,1
+Ari→Siam,MRT,1,1,1,17,34,0,4,3,1,0,0,1
+Siam→Asok,MRT,1,1,1,23,16,0,1,3,0,1,1,1
+Siam→Chitlom,Bus,1,0,1,32,51,1,5,2,1,0,0,1
+Mo Chit→Victory Monument,Bus,1,1,1,36,45,1,1,3,1,0,1,1
+On Nut→Kasetsart,BTS+MRT,1,1,1,42,36,0,5,4,1,1,1,1
+Ari→Siam,BTS+MRT,1,1,0,29,45,0,3,2,1,1,1,1
+Bearing→Siam,BTS+MRT,1,1,1,42,38,0,1,5,0,0,0,1
+Bearing→Siam,MRT,1,1,1,43,58,0,4,2,1,0,1,1
+Siam→Kasetsart,BTS+Bus,1,1,0,42,49,1,5,4,0,1,0,1
+Siam→Asok,MRT,1,1,1,19,51,0,4,3,1,0,0,1
+Siam→Asok,Bus,1,1,1,31,43,1,3,4,1,0,1,1
+Siam→Chitlom,BTS+Bus,1,1,0,63,24,1,3,3,1,1,0,1
+National Stadium→Mo Chit,BTS+Bus,1,1,1,21,34,1,1,1,0,1,0,1
+Siam→Kasetsart,MRT,1,1,1,44,44,0,2,4,0,0,1,1
+Ari→Siam,BTS,1,0,1,44,39,0,1,2,0,1,0,1
+On Nut→Kasetsart,BTS,1,1,1,29,44,0,1,3,1,1,1,1
+On Nut→Kasetsart,BTS+Bus,1,1,1,60,60,1,3,5,0,0,1,1
+Siam→Asok,MRT,1,1,1,49,39,0,4,5,0,1,1,1
+Siam→Kasetsart,BTS+Bus,1,1,1,52,25,0,4,3,0,0,1,1
+Bearing→Siam,BTS+MRT,1,1,1,25,27,0,4,5,1,1,1,1
+Ari→Siam,BTS+Bus,1,1,1,35,17,0,3,2,1,0,1,1
+On Nut→Kasetsart,BTS+Bus,1,1,1,40,49,0,1,4,0,1,0,1
+Bang Wa→Siam,Bus,0,1,1,22,43,0,1,2,0,1,1,1
+Siam→Kasetsart,BTS+MRT,1,1,1,20,51,0,3,5,1,0,1,1
+Mo Chit→Victory Monument,Bus,1,0,1,23,23,0,4,1,1,0,0,1
+Bang Wa→Siam,MRT,1,0,1,60,40,0,4,2,1,1,1,1
+Bearing→Siam,BTS,1,0,1,49,62,0,3,3,1,1,1,1
+On Nut→Kasetsart,BTS,0,0,1,46,55,0,3,1,1,0,1,0
+Bang Wa→Siam,BTS+Bus,1,0,1,53,69,1,4,3,0,0,0,1
+Bearing→Siam,BTS,1,0,1,17,42,0,2,2,1,0,1,1
+Siam→Asok,Bus,1,1,0,42,55,1,3,2,1,0,0,1
+Siam→Chitlom,MRT,1,1,1,60,43,0,1,1,1,0,1,1
+Siam→Kasetsart,BTS+Bus,1,1,1,37,38,1,3,2,1,0,0,1
+Siam→Asok,BTS+MRT,1,1,1,39,61,0,2,2,1,1,0,1
+Siam→Asok,BTS,1,1,1,39,42,0,3,2,0,1,0,1
+Bang Wa→Siam,BTS+MRT,1,1,1,61,16,0,3,2,0,1,1,1
+Siam→Chitlom,MRT,1,1,1,55,19,0,5,1,1,1,0,1
+Ari→Siam,BTS+MRT,1,1,1,47,64,0,1,1,0,0,1,1
+Bang Wa→Siam,BTS,0,0,1,35,55,0,5,4,1,1,0,1
+National Stadium→Mo Chit,BTS+MRT,1,1,1,49,28,0,2,5,1,1,0,1
+Mo Chit→Victory Monument,BTS+Bus,1,0,1,44,22,1,4,5,0,1,0,1
+Siam→Asok,BTS,1,1,1,39,48,0,5,3,0,1,0,1
+Mo Chit→Victory Monument,BTS,1,1,1,34,48,0,1,3,0,1,1,1
+National Stadium→Mo Chit,Bus,1,0,1,23,51,1,1,2,0,0,0,1
+Bang Wa→Siam,BTS,1,1,1,19,50,0,4,2,1,0,1,1
+Asok→Lat Phrao,Bus,0,1,1,20,26,1,2,5,0,1,0,1
+Bearing→Siam,Bus,1,1,1,40,27,1,3,5,1,0,1,1
+Asok→Lat Phrao,BTS+MRT,0,0,1,63,49,0,2,2,0,1,0,0
+Bang Wa→Siam,BTS+MRT,1,0,0,38,15,0,4,3,0,0,0,1
+Ari→Siam,BTS+Bus,0,0,1,19,29,1,5,4,1,1,0,1
+On Nut→Kasetsart,BTS,1,1,1,54,51,0,1,4,0,0,1,0
+Mo Chit→Victory Monument,Bus,0,1,1,45,32,1,2,1,0,0,0,1
+Siam→Kasetsart,BTS,1,1,1,51,37,0,2,4,1,1,1,1
+Siam→Asok,BTS,1,1,1,61,53,0,1,2,1,0,0,0
+Bang Wa→Siam,Bus,1,1,1,28,16,0,4,4,0,0,1,1
+Siam→Asok,MRT,1,1,1,31,23,0,2,4,1,0,1,1
+Siam→Asok,BTS,0,1,1,25,20,0,3,1,0,1,0,1
+Siam→Kasetsart,BTS+MRT,1,1,1,41,58,0,4,2,1,0,0,1
+Mo Chit→Victory Monument,Bus,1,1,1,58,33,1,4,4,1,0,0,1
+Mo Chit→Victory Monument,BTS+Bus,1,1,0,57,66,1,5,1,1,1,1,1
+National Stadium→Mo Chit,BTS+Bus,1,1,1,18,35,1,5,2,0,1,0,1
+Bearing→Siam,BTS+MRT,1,1,1,27,21,0,2,2,1,0,0,1
+On Nut→Kasetsart,BTS+Bus,1,0,1,54,35,1,3,5,0,1,0,1
+On Nut→Kasetsart,MRT,0,0,0,51,34,0,2,4,0,0,0,0
+Bang Wa→Siam,BTS+MRT,1,1,1,56,27,0,2,3,0,1,0,1
+Siam→Chitlom,MRT,1,0,1,50,70,0,3,1,1,1,0,1
+Asok→Lat Phrao,Bus,1,0,1,57,46,1,3,2,1,0,0,1
+Ari→Siam,Bus,1,1,1,61,51,1,4,5,0,0,1,1
+On Nut→Kasetsart,MRT,1,1,1,38,62,0,1,2,1,1,0,1
+Siam→Asok,Bus,1,1,1,33,65,1,1,1,0,1,1,1
+Ari→Siam,MRT,0,1,1,51,39,0,1,4,0,0,1,0
+Siam→Asok,BTS,1,1,0,21,36,0,2,4,0,0,0,1
+Asok→Lat Phrao,BTS+MRT,0,0,1,44,56,0,2,5,1,0,0,0
+Siam→Asok,Bus,1,1,1,63,49,0,3,3,1,0,0,1
+Siam→Chitlom,BTS+Bus,1,0,1,44,20,1,3,5,1,0,0,1
+Siam→Chitlom,MRT,1,1,1,24,34,0,4,4,1,1,0,1
+National Stadium→Mo Chit,BTS+Bus,1,0,1,33,43,1,4,3,0,1,0,1
+Siam→Kasetsart,BTS,1,1,1,65,52,0,2,5,0,1,1,1
+National Stadium→Mo Chit,BTS+Bus,1,1,1,62,17,1,5,5,0,0,1,1
+Siam→Kasetsart,MRT,0,0,1,44,20,0,4,2,0,1,1,1
+Siam→Asok,BTS,1,1,1,34,48,0,4,1,1,0,1,1
+Siam→Kasetsart,MRT,1,1,0,23,21,0,5,1,1,1,1,1
+Mo Chit→Victory Monument,BTS+Bus,1,1,1,42,24,1,5,5,1,0,1,1
+Asok→Lat Phrao,MRT,1,1,1,40,16,0,3,3,1,1,1,1
+Siam→Asok,MRT,1,0,1,37,32,0,4,5,0,0,1,1
+Bang Wa→Siam,BTS+Bus,1,0,0,49,65,0,2,1,1,1,0,0
+National Stadium→Mo Chit,BTS+MRT,1,1,1,20,30,0,1,4,0,1,0,1
+Mo Chit→Victory Monument,Bus,0,1,1,18,30,1,3,4,1,0,1,1
+On Nut→Kasetsart,BTS+MRT,1,1,0,64,68,0,1,3,0,1,0,0
+Siam→Kasetsart,BTS+MRT,1,1,1,31,58,0,2,3,1,0,0,1
+Bearing→Siam,MRT,1,1,1,33,53,0,3,3,1,1,1,1
+Bearing→Siam,Bus,1,1,1,54,21,1,1,5,1,1,1,1
+Siam→Asok,BTS+Bus,1,0,1,33,56,0,3,2,0,0,0,1
+On Nut→Kasetsart,BTS+Bus,1,1,1,35,31,1,4,4,1,0,0,1
+Asok→Lat Phrao,MRT,1,1,1,59,37,0,5,3,0,0,1,1
+Siam→Asok,BTS+Bus,1,1,1,28,58,0,3,1,0,1,0,1
+Mo Chit→Victory Monument,BTS+Bus,1,1,1,24,45,1,1,5,0,1,0,1
+National Stadium→Mo Chit,BTS,0,1,1,20,70,0,2,2,0,1,1,1
+On Nut→Kasetsart,BTS+Bus,1,0,1,38,55,1,2,3,0,0,1,1
