@@ -40,7 +40,7 @@ header_html = """
 
 <div class="custom-header">
     <h1> AI accessibility route planner for wheelchair users</h1>
-    <h3>ระบบส่งเสริมการวางแผนการเดินทางด้วยปัญญาประดิษฐ์เพื่อผู้ใช้รถเข็นวีลแชร์</h3>
+    <h3>ระบบส่งเสริมการวางแผนการเดินทางด้วยปัญญาประดิษฐ์สำหรับผู้ใช้รถเข็น</h3>
 </div>
 """
 st.markdown(header_html, unsafe_allow_html=True)
