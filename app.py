@@ -4,7 +4,7 @@ import numpy as np
 import folium
 from streamlit_folium import st_folium
 
-st.set_page_config(page_title="AI Accessibility Route Planner V4", layout="wide")
+st.set_page_config(page_title="AI Accessibility Route Planner V4.1", layout="wide")
 st.title("♿ AI Accessibility Route Planner (Wheelshare)")
 st.subheader("ระบบวางแผนเลือกโหมดการเดินทางและเจาะลึกสถานีรับ-ส่งอัจฉริยะ")
 st.write("---")
@@ -50,7 +50,6 @@ end_place_name = st.sidebar.selectbox("🏁 เลือกจุดปลาย
 
 st.sidebar.write("---")
 st.sidebar.markdown("### 🚏 เลือกโหมดการเดินทางที่ต้องการ")
-# 🔥 ออปชันให้ผู้พิการเลือกโหมดการเดินทางหลักตามโจทย์
 travel_mode = st.sidebar.radio(
     "โปรดเลือกรูปแบบการเดินทางหลักที่สะดวก:",
     [
@@ -90,24 +89,24 @@ with col1:
         
         st.info(f"**🔴 ขั้นที่ 3 (เข้าสู่จุดหมาย):** {transport_last_leg} จากสถานี BTS {nearest_bts_end['clean_name']} ตรงเข้าสู่เป้าหมาย **{end_place_name}** (ระยะทาง {nearest_bts_end['dist_end']:.1f} เมตร)")
 
-    # 🎯 OPTION 2: เดินทางด้วยรถเมล์ชานต่ำ (ดึงข้อมูลจาก Bus stop แกะสเต็ปละเอียด)
+    # 🎯 OPTION 2: เดินทางด้วยรถเมล์ชานต่ำ (แก้ไขจุด NameError เรียบร้อยแล้ว)
     elif "🚌" in travel_mode:
-        # หาลป้ายรถเมล์ที่ใกล้จุดต้นทางที่สุด
+        # หาป้ายรถเมล์ที่ใกล้จุดต้นทางที่สุด (ป้ายขาขึ้น)
         df_bus_stops['dist_to_origin'] = [haversine_distance(start_info['latitude'], start_info['longitude'], row['latitude'], row['longitude']) for idx, row in df_bus_stops.iterrows()]
         nearest_bus_start = df_bus_stops.sort_values(by='dist_to_origin').iloc[0]
-        matched_bus_line = nearest_bus_start['place_name'] # ตัวแปรชื่อสายรถเมล์
+        matched_bus_line = nearest_bus_start['place_name'] 
 
-        # หาลป้ายรถเมล์ที่ใกล้จุดปลายทางที่สุด (ดึงคำสั่งลงจากไฟล์ตามโจทย์)
+        # หาป้ายรถเมล์ที่ใกล้จุดปลายทางที่สุด (ป้ายขาลง)
         df_bus_stops['dist_to_destination'] = [haversine_distance(end_info['latitude'], end_info['longitude'], row['latitude'], row['longitude']) for idx, row in df_bus_stops.iterrows()]
         nearest_bus_end = df_bus_stops.sort_values(by='dist_to_destination').iloc[0]
 
         st.success(f"🚌 **แนะนำให้ใช้บริการ: รถเมล์ไทยสมายล์บัส สาย {matched_bus_line}**")
         st.markdown(f"""
         **📋 ขั้นตอนการเดินทางที่คุณต้องทำ:**
-        1. **🚶 การขึ้นรถ:** เข็นวีลแชร์เดินเท้าจากจุดเริ่มต้นไปยัง **ป้ายรถเมล์ที่ใกล้ที่สุด** (ระยะทางประมาณ {nearest_bus_start['dist_to_origin']:.1f} เมตร)
-        2. **💳 รอขึ้นรถ:** สังเกตรถเมล์สาย **{matched_bus_line}** เมื่อรถจอด แจ้งพนักงานเพื่อขอกางทางลาดไฮโดรลิกเพื่อเข็นรถขึ้นสู่พื้นที่ล็อกวีลแชร์ภายในตัวรถ (ค่าโดยสารคงที่ 20 บาท)
-        3. **🛑 การลงรถ:** ให้แจ้งพนักงานขับรถล่วงหน้าว่าจะขอลงที่ **ป้ายจอดรถเมล์เป้าหมายใกล้ปลายทาง**
-        4. **🏁 เข้าสู่จุดหมาย:** เมื่อลงจากรถเมล์แล้ว ให้เข็นวีลแชร์ต่อจากป้ายจอดดังกล่าวตรงไปยัง **{end_place_name}** (ระยะทางเดินเท้าช่วงสุดท้ายประมาณ {nearest_bus_match['dist_to_origin']:.1f} เมตร)
+        1. **🚶 การขึ้นรถ:** เข็นวีลแชร์เดินเท้าจากจุดเริ่มต้นไปยัง **ป้ายรถเมล์ขาขึ้นที่ใกล้ที่สุด** (ระยะทางประมาณ {nearest_bus_start['dist_to_origin']:.1f} เมตร)
+        2. **💳 รอขึ้นรถ:** สังเกตรถเมล์สาย **{matched_bus_line}** เมื่อรถจอด แจ้งพนักงานเพื่อขอกางทางลาดเพื่อเข็นรถขึ้นสู่พื้นที่ล็อกวีลแชร์ภายในตัวรถ (ค่าโดยสารคงที่ 20 บาท)
+        3. **🛑 การลงรถ:** นั่งยาวไปลงที่ **ป้ายจอดรถเมล์ขาลงใกล้ปลายทางมากที่สุด**
+        4. **🏁 เข้าสู่จุดหมาย:** เมื่อลงจากรถเมล์แล้ว ให้เข็นวีลแชร์ต่อจากป้ายจอดดังกล่าวตรงไปยังเป้าหมาย **{end_place_name}** (ระยะทางเดินเท้าช่วงสุดท้ายประมาณ {nearest_bus_end['dist_to_destination']:.1f} เมตร)
         """)
 
     # 🎯 OPTION 3: สวัสดิการรถตู้จากรัฐ
@@ -135,7 +134,7 @@ with col2:
     folium.Marker([start_info['latitude'], start_info['longitude']], popup=f"ต้นทาง: {start_place_name}", icon=folium.Icon(color='orange', icon='play', prefix='fa')).add_to(m)
     folium.Marker([end_info['latitude'], end_info['longitude']], popup=f"ปลายทาง: {end_place_name}", icon=folium.Icon(color='green', icon='flag', prefix='fa')).add_to(m)
     
-    # แสดงเส้นและหมุดย่อยตามโหมดที่เลือกเพื่อไม่ให้แผนที่รก
+    # แสดงเส้นและหมุดย่อยตามโหมดที่เลือก
     if "🚇" in travel_mode:
         folium.Marker([nearest_bts_start['lat'], nearest_bts_start['lng']], popup=f"BTS ต้นทาง", icon=folium.Icon(color='blue', icon='train', prefix='fa')).add_to(m)
         folium.Marker([nearest_bts_end['lat'], nearest_bts_end['lng']], popup=f"BTS ปลายทาง", icon=folium.Icon(color='blue', icon='train', prefix='fa')).add_to(m)
@@ -145,15 +144,14 @@ with col2:
         folium.PolyLine([[start_info['latitude'], start_info['longitude']], [nearest_bts_start['lat'], nearest_bts_start['lng']]], color=color_leg1, weight=4).add_to(m)
 
     elif "🚌" in travel_mode:
-        # ปักหมุดป้ายขึ้นและป้ายลงรถเมล์ที่ AI แอบสแกนหาเจอในไฟล์
+        # ปักหมุดป้ายขึ้นและป้ายลงรถเมล์ที่ AI หาเจอตามจริง
         folium.Marker([nearest_bus_start['latitude'], nearest_bus_start['longitude']], popup=f"ป้ายขึ้นรถเมล์สาย {matched_bus_line}", icon=folium.Icon(color='purple', icon='arrow-up', prefix='fa')).add_to(m)
-        folium.Marker([nearest_bus_end['latitude'], nearest_bus_end['longitude']], popup=f"ป้ายลงรถเมล์สาย {matched_bus_line}", icon=folium.Icon(color='purple', icon='arrow-down', prefix='fa')).add_to(m)
+        folium.Marker([nearest_bus_end['latitude'], nearest_bus_end['longitude']], popup=f"ป้ายลงรถเมล์ที่ใกล้จุดหมายที่สุด", icon=folium.Icon(color='purple', icon='arrow-down', prefix='fa')).add_to(m)
         
         # ลากเส้นแนววิ่งรถเมล์สีม่วง
         folium.PolyLine([[nearest_bus_start['latitude'], nearest_bus_start['longitude']], [nearest_bus_end['latitude'], nearest_bus_end['longitude']]], color='purple', weight=5, dash_array='10, 10').add_to(m)
 
     elif "🏥" in travel_mode and is_hospital:
-        # ถ้าเป็นรถตู้สวัสดิการ จะลากเป็นเส้นตรงยาวบริการพิเศษ (เส้นทึบสีทอง/เหลือง)
         folium.PolyLine([[start_info['latitude'], start_info['longitude']], [end_info['latitude'], end_info['longitude']]], color='cadetblue', weight=6, popup="เส้นทางบริการรถตู้สวัสดิการรัฐ").add_to(m)
 
     st_folium(m, width="100%", height=580)
