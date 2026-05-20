@@ -213,8 +213,9 @@ with col1:
         has_ramp_start = "มี" if str(nearest_bts_start['ทางลาดสำหรับรถเข็น']).strip() in ['1', '1.0', 'มี', 'Yes'] else "ไม่มี"
 
         st.info(f"**🟢 ขั้นที่ 1:** {transport_first_leg} ไปยัง **สถานีรถไฟฟ้า BTS {nearest_bts_start['clean_name']}** (ระยะทาง {nearest_bts_start['dist_start']:.1f} เมตร)")
-        st.write(f"ℹ️ *สิ่งอำนวยความสะดวกสถานีรถไฟฟ้า: มีลิฟต์วีลแชร์ = **{has_lift_start}**, มีทางลาด = **{has_ramp_start}***")
-        
+        st.write("ℹ️ **ข้อมูลสิ่งอำนวยความสะดวกสถานีปลายทาง:**")
+        st.write(f"* มีลิฟต์วีลแชร์ = **{has_lift_end}**")
+        st.write(f"* มีทางลาดสำหรับรถเข็น = **{has_ramp_end}**")        
         if nearest_bts_start['clean_name'] != nearest_bts_end['clean_name']:
             st.info(f"**🔵 ขั้นที่ 2:** ขึ้นรถไฟฟ้า BTS เดินทางจากสถานี **{nearest_bts_start['clean_name']}** ไปลงที่สถานีเป้าหมาย **{nearest_bts_end['clean_name']}**")
         
