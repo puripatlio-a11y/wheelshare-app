@@ -5,9 +5,9 @@ import folium
 import os
 from streamlit_folium import st_folium
 
-st.set_page_config(page_title="AI Accessibility Route Planner V6.3", layout="wide")
+st.set_page_config(page_title="AI Accessibility Route Planner V6.4", layout="wide")
 
-# 🎨 [อัปเดตจุดตามสั่ง] สร้างพื้นที่ส่วนหัวข้อ (Header Banner) โดยนำ URL รูปภาพมาทำเป็นพื้นหลังด้วย CSS
+# 🎨 สร้างพื้นที่ส่วนหัวข้อ (Header Banner) โดยนำ URL รูปภาพมาทำเป็นพื้นหลังด้วย CSS
 header_html = """
 <style>
     .custom-header {
@@ -39,7 +39,7 @@ header_html = """
 </style>
 
 <div class="custom-header">
-    <h1> AI accessibility route planner for wheelchair users</h1>
+    <h1>♿ AI Accessibility Route Planner for Wheelchair Users</h1>
     <h3>ระบบส่งเสริมการวางแผนการเดินทางด้วยปัญญาประดิษฐ์สำหรับผู้ใช้รถเข็น</h3>
 </div>
 """
@@ -177,7 +177,7 @@ start_place_name = start_info['place_name']
 end_place_name = end_info['place_name']
 
 st.sidebar.write("---")
-st.sidebar.markdown("### 🚏 เลือกโหมดการเดินทาง")
+st.sidebar.markdown("### 𚚏 เลือกโหมดการเดินทาง")
 travel_mode = st.sidebar.radio(
     "โปรดเลือกรูปแบบการเดินทางหลักที่สะดวก:",
     [
@@ -200,6 +200,7 @@ with col1:
 
     # 🚇 1. โหมด BTS
     if "🚇" in travel_mode:
+        # คำนวณหาสถานีต้นทางและปลายทางที่ใกล้ที่สุดก่อนทำงานส่วนอื่น
         df_bts_master['dist_start'] = [haversine_distance(start_info['latitude'], start_info['longitude'], r['lat'], r['lng']) for i, r in df_bts_master.iterrows()]
         nearest_bts_start = df_bts_master.sort_values(by='dist_start').iloc[0]
 
@@ -209,21 +210,33 @@ with col1:
         transport_first_leg = "🚶 เข็นวีลแชร์เดินเท้า" if nearest_bts_start['dist_start'] <= 150 else "🚖 แนะนำเรียกใช้บริการ แกร็บ (Grab) หรือ แท็กซี่"
         transport_last_leg = "🚶 เข็นวีลแชร์เดินเท้า" if nearest_bts_end['dist_end'] <= 150 else "🚖 แนะนำเรียกใช้บริการ แกร็บ (Grab) หรือ แท็กซี่"
 
+        # แปลงข้อมูลความพร้อมของอารยสถาปัตย์ (ลิฟต์ / ทางลาด) ให้เป็นข้อความเข้าใจง่าย
         has_lift_start = "มี" if str(nearest_bts_start['มีลิฟต์']).strip() in ['1', '1.0', 'มี', 'Yes'] else "ไม่มี"
         has_ramp_start = "มี" if str(nearest_bts_start['ทางลาดสำหรับรถเข็น']).strip() in ['1', '1.0', 'มี', 'Yes'] else "ไม่มี"
+        
+        has_lift_end = "มี" if str(nearest_bts_end['มีลิฟต์']).strip() in ['1', '1.0', 'มี', 'Yes'] else "ไม่มี"
+        has_ramp_end = "มี" if str(nearest_bts_end['ทางลาดสำหรับรถเข็น']).strip() in ['1', '1.0', 'มี', 'Yes'] else "ไม่มี"
 
+        # แสดงผลขั้นตอนช่วงที่ 1 พร้อมข้อมูลอารยสถาปัตย์ต้นทาง
         st.info(f"**🟢 ขั้นที่ 1:** {transport_first_leg} ไปยัง **สถานีรถไฟฟ้า BTS {nearest_bts_start['clean_name']}** (ระยะทาง {nearest_bts_start['dist_start']:.1f} เมตร)")
-        st.write("ℹ️ **ข้อมูลสิ่งอำนวยความสะดวกสถานีปลายทาง:**")
-        st.write(f"* มีลิฟต์วีลแชร์ = **{has_lift_end}**")
-        st.write(f"* มีทางลาดสำหรับรถเข็น = **{has_ramp_end}**")        
+        st.write("ℹ️ **ข้อมูลสิ่งอำนวยความสะดวกสถานีต้นทาง:**")
+        st.write(f"* มีลิฟต์วีลแชร์ = **{has_lift_start}**")
+        st.write(f"* มีทางลาดสำหรับรถเข็น = **{has_ramp_start}**")        
+        st.write("")
+
+        # แสดงผลขั้นตอนช่วงที่ 2
         if nearest_bts_start['clean_name'] != nearest_bts_end['clean_name']:
             st.info(f"**🔵 ขั้นที่ 2:** ขึ้นรถไฟฟ้า BTS เดินทางจากสถานี **{nearest_bts_start['clean_name']}** ไปลงที่สถานีเป้าหมาย **{nearest_bts_end['clean_name']}**")
         
+        # แสดงผลขั้นตอนช่วงที่ 3 พร้อมข้อมูลอารยสถาปัตย์ปลายทาง
         st.info(f"**🔴 ขั้นที่ 3:** {transport_last_leg} จากสถานีรถไฟฟ้าปลายทางเข้าสู่พิกัดเป้าหมาย **{end_label_th.split(' (')[0]}** (ระยะทาง {nearest_bts_end['dist_end']:.1f} เมตร)")
+        st.write("ℹ️ **ข้อมูลสิ่งอำนวยความสะดวกสถานีปลายทาง:**")
+        st.write(f"* มีลิฟต์วีลแชร์ = **{has_lift_end}**")
+        st.write(f"* มีทางลาดสำหรับรถเข็น = **{has_ramp_end}**")
 
     # 🚌 2. โหมดรถเมล์ชานต่ำ
     elif "🚌" in travel_mode:
-        st.markdown("#### 🚏 ผลคำนวณการเดินรถโดยสารสาธารณะอารยสถาปัตย์")
+        st.markdown("#### 𚏏 ผลคำนวณการเดินรถโดยสารสาธารณะอารยสถาปัตย์")
         
         start_keywords = bus_translation_dict.get(start_place_name, [start_place_name])
         end_keywords = bus_translation_dict.get(end_place_name, [end_place_name])
@@ -255,7 +268,7 @@ with col1:
             nearest_bts_end = df_bts_master.sort_values(by='dist_end').iloc[0]
             
             st.markdown(f"""
-            **🗺️ แผนการเดินทางพ่วงเชื่อมต่ออัจฉริยะ (รถรับจ้าง + รถไฟฟ้า BTS + แกร็บวีลแชร์):**
+            **🗺️ แंधनการเดินทางพ่วงเชื่อมต่ออัจฉริยะ (รถรับจ้าง + รถไฟฟ้า BTS + แกร็บวีลแชร์):**
             * **🟢 ช่วงที่ 1 (เข้าสู่สถานีรถไฟฟ้า):** เดินทางจากจุดเริ่มต้นไปยัง **สถานีรถไฟฟ้า BTS {nearest_bts_start['clean_name']}** (ระยะทางประมาณ {nearest_bts_start['dist_start']:.1f} เมตร แนะนำเรียกบริการ **แกร็บวีลแชร์ (GrabAssist)** หรือแท็กซี่หากเดินทางบนทางเท้าไม่สะดวก)
             * **🔵 ช่วงที่ 2 (เดินทางด้วยระบบรางด่วน):** ใช้ลิฟต์อารยสถาปัตย์เพื่อขึ้นสู่สถานี นั่งรถไฟฟ้า BTS จากสถานี **{nearest_bts_start['clean_name']}** มุ่งหน้าไปลงที่สถานีปลายทาง **{nearest_bts_end['clean_name']}** *(มีสิ่งอำนวยความสะดวกสำหรับผู้พิการครบครัน)*
             * **🔴 ช่วงที่ 3 (เข้าสู่เป้าหมายปลายทาง):** ลงจากสถานีรถไฟฟ้า และเรียกรถ **แกร็บ (Grab) / แท็กซี่** เข้าสู่พิกัดเป้าหมาย **{end_label_th.split(' (')[0]}** (ระยะทาง {nearest_bts_end['dist_end']:.1f} เมตร)
