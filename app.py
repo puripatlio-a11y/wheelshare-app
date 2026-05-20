@@ -7,7 +7,7 @@ from streamlit_folium import st_folium
 
 st.set_page_config(page_title="AI Accessibility Route Planner V5.9", layout="wide")
 st.title("♿ AI Accessibility Route Planner (Wheelshare)")
-st.subheader("ระบบวางแผนเส้นทางอัจฉริยะ (เวอร์ชันพ่วงต่อ รถเมล์ + BTS + Grab สำหรับวีลแชร์)")
+st.subheader("ระบบวางแผนเส้นทางอัจฉริยะ")
 st.write("---")
 
 def haversine_distance(lat1, lon1, lat2, lon2):
