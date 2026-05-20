@@ -39,7 +39,7 @@ header_html = """
 </style>
 
 <div class="custom-header">
-    <h1> AI Accessibility route planner for users wheelchair</h1>
+    <h1> AI Accessibility route planner for wheelchair users</h1>
     <h3>ระบบวางแผนเส้นทางอัจฉริยะสำหรับผู้ใช้วีลแชร์ </h3>
 </div>
 """
