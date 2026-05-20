@@ -5,9 +5,45 @@ import folium
 import os
 from streamlit_folium import st_folium
 
-st.set_page_config(page_title="AI Accessibility Route Planner V6.1", layout="wide")
-st.title("♿ AI Accessibility Route Planner (Wheelshare)")
-st.subheader("ระบบวางแผนเส้นทางอัจฉริยะสำหรับผู้ใช้วีลแชร์ ")
+st.set_page_config(page_title="AI Accessibility Route Planner V6.3", layout="wide")
+
+# 🎨 [อัปเดตจุดตามสั่ง] สร้างพื้นที่ส่วนหัวข้อ (Header Banner) โดยนำ URL รูปภาพมาทำเป็นพื้นหลังด้วย CSS
+header_html = """
+<style>
+    .custom-header {
+        background-image: linear-gradient(rgba(0, 0, 0, 0.4), rgba(0, 0, 0, 0.55)), 
+                          url("https://img.freepik.com/free-photo/full-shot-happy-friends-chatting-outside_23-2149391993.jpg?semt=ais_hybrid&w=740&q=80");
+        background-size: cover;
+        background-position: center;
+        padding: 40px;
+        border-radius: 12px;
+        color: white;
+        text-align: center;
+        margin-bottom: 25px;
+        box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+    }
+    .custom-header h1 {
+        color: #ffffff !important;
+        font-family: 'Helvetica Neue', Arial, sans-serif;
+        font-weight: 700;
+        font-size: 2.5rem !important;
+        text-shadow: 2px 2px 8px rgba(0,0,0,0.7);
+        margin-bottom: 5px;
+    }
+    .custom-header h3 {
+        color: #f0f2f6 !important;
+        font-size: 1.3rem !important;
+        font-weight: 400;
+        text-shadow: 1px 1px 5px rgba(0,0,0,0.7);
+    }
+</style>
+
+<div class="custom-header">
+    <h1>♿ AI Accessibility Route Planner (Wheelshare)</h1>
+    <h3>ระบบวางแผนเส้นทางอัจฉริยะสำหรับผู้ใช้วีลแชร์ (เวอร์ชันภาษาไทย อ่านง่าย)</h3>
+</div>
+"""
+st.markdown(header_html, unsafe_allow_html=True)
 st.write("---")
 
 def haversine_distance(lat1, lon1, lat2, lon2):
@@ -49,7 +85,7 @@ except Exception as e:
     st.error(f"❌ ระบบไม่สามารถอ่านฐานข้อมูลไฟล์ได้: {e}")
     st.stop()
 
-# 🎯 1. พจนานุกรมแปลชื่อสถานที่จากภาษาอังกฤษในไฟล์ ให้เป็นภาษาไทยทั้งหมด
+# 🎯 1. พจนานุกรมแปลชื่อสถานที่บนหน้าเว็บเป็นภาษาไทย
 th_name_base_map = {
     "Victory Monument": "อนุสาวรีย์ชัยสมรภูมิ",
     "Siam Station": "สถานีรถไฟฟ้า สยาม",
@@ -84,7 +120,7 @@ bus_translation_dict = {
     "Chatuchak Park": ["BTSหมอชิต", "ห้าแยกลาดพร้าว"]
 }
 
-# 🎯 2. ลอจิกเจาะลึก: ค้นหาสายรถเมล์ที่ผ่านแต่ละสถานที่เพื่อนำไปใส่ในวงเล็บ Dropdown อัตโนมัติ
+# 🎯 2. คำนวณหลังบ้านล่วงหน้าเพื่อทำป้ายวงเล็บแจ้งสายรถเมล์และ BTS ใน Dropdown
 display_names_th_with_brackets = []
 for idx, row in df_places.iterrows():
     p_name = row['place_name']
@@ -98,24 +134,20 @@ for idx, row in df_places.iterrows():
     if "bts" in p_name.lower() or min_bts_dist <= 500:
         suffixes.append("BTS")
         
-    # ตรวจสอบสายรถเมล์เฉพาะเจาะจงที่วิ่งผ่านสถานที่นี้
+    # ตรวจสอบสายรถเมล์ที่ผ่านสถานที่นี้
     keywords = bus_translation_dict.get(p_name, [p_name])
     local_bus_lines = []
     for b_idx, b_row in df_bus_routes.iterrows():
         route_text = str(b_row['ต้นทาง']) + str(b_row['ปลาย']) + str(b_row['ผ่าน'])
         if any(k.lower() in route_text.lower() for k in keywords):
-            b_line = str(b_row['สาย']).strip()
-            local_bus_lines.append(b_line)
+            local_bus_lines.append(str(b_row['สาย']).strip())
             
     if local_bus_lines:
         unique_local_buses = sorted(list(set(local_bus_lines)))
-        bus_list_str = ", ".join(unique_local_buses)
-        suffixes.append(f"เดินทางด้วยรถเมล์ได้ สาย: {bus_list_str}")
+        suffixes.append(f"เดินทางด้วยรถเมล์ได้ สาย: {', '.join(unique_local_buses)}")
         
-    # ประกอบชื่อภาษาไทยพร้อมวงเล็บข้อมูลบริการ
     if suffixes:
-        bracket_text = f" ({' / '.join(suffixes)})"
-        final_display = th_name + bracket_text
+        final_display = f"{th_name} ({' / '.join(suffixes)})"
     else:
         final_display = th_name
         
@@ -177,8 +209,11 @@ with col1:
         transport_first_leg = "🚶 เข็นวีลแชร์เดินเท้า" if nearest_bts_start['dist_start'] <= 150 else "🚖 แนะนำเรียกใช้บริการ แกร็บ (Grab) หรือ แท็กซี่"
         transport_last_leg = "🚶 เข็นวีลแชร์เดินเท้า" if nearest_bts_end['dist_end'] <= 150 else "🚖 แนะนำเรียกใช้บริการ แกร็บ (Grab) หรือ แท็กซี่"
 
+        has_lift_start = "มี" if str(nearest_bts_start['มีลิฟต์']).strip() in ['1', '1.0', 'มี', 'Yes'] else "ไม่มี"
+        has_ramp_start = "มี" if str(nearest_bts_start['ทางลาดสำหรับรถเข็น']).strip() in ['1', '1.0', 'มี', 'Yes'] else "ไม่มี"
+
         st.info(f"**🟢 ขั้นที่ 1:** {transport_first_leg} ไปยัง **สถานีรถไฟฟ้า BTS {nearest_bts_start['clean_name']}** (ระยะทาง {nearest_bts_start['dist_start']:.1f} เมตร)")
-        st.write(f"ℹ️ *สิ่งอำนวยความสะดวกสถานีรถไฟฟ้า: มีลิฟต์วีลแชร์ = {nearest_bts_start['มีลิฟต์']}, มีทางลาด = {nearest_bts_start['ทางลาดสำหรับรถเข็น']}*")
+        st.write(f"ℹ️ *สิ่งอำนวยความสะดวกสถานีรถไฟฟ้า: มีลิฟต์วีลแชร์ = **{has_lift_start}**, มีทางลาด = **{has_ramp_start}***")
         
         if nearest_bts_start['clean_name'] != nearest_bts_end['clean_name']:
             st.info(f"**🔵 ขั้นที่ 2:** ขึ้นรถไฟฟ้า BTS เดินทางจากสถานี **{nearest_bts_start['clean_name']}** ไปลงที่สถานีเป้าหมาย **{nearest_bts_end['clean_name']}**")
@@ -187,7 +222,7 @@ with col1:
 
     # 🚌 2. โหมดรถเมล์ชานต่ำ
     elif "🚌" in travel_mode:
-        st.markdown("#### 𚏏 ผลคำนวณการเดินรถโดยสารสาธารณะอารยสถาปัตย์")
+        st.markdown("#### 🚏 ผลคำนวณการเดินรถโดยสารสาธารณะอารยสถาปัตย์")
         
         start_keywords = bus_translation_dict.get(start_place_name, [start_place_name])
         end_keywords = bus_translation_dict.get(end_place_name, [end_place_name])
@@ -197,7 +232,6 @@ with col1:
             if any(k.lower() in route_text.lower() for k in start_keywords) and any(k.lower() in route_text.lower() for k in end_keywords):
                 matched_lines.append(str(row['สาย']).strip())
 
-        # กรณีเจอสายรถเมล์ที่ผ่านร่วมกันต่อเดียวถึง
         if matched_lines:
             unique_lines_list = sorted(list(set(matched_lines)))
             all_suggested_lines = " หรือ สาย ".join(unique_lines_list)
@@ -206,11 +240,10 @@ with col1:
             st.markdown(f"""
             **📋 ขั้นตอนการเดินทาง:**
             1. **🚶 จุดขึ้นรถ:** เข็นวีลแชร์ไปยังป้ายหยุดรถประจำทาง ณ **{start_label_th.split(' (')[0]}**
-            2. **💳 การขึ้นรถ:** สามารถเลือกขึ้นรถเมล์สาย **{all_suggested_lines}** สายใดก็ได้ที่มาถึงก่อน (ตัวรถเป็นแบบชานต่ำ มีทางลาดลาดเอียงไฮโดรลิก และระบบล็อกล้อรถเข็นปลอดภัย ค่าบริการ 20 บาทตลอดสาย)
+            2. **💳 การขึ้นรถ:** สามารถเลือกขึ้นรถเมล์สาย **{all_suggested_lines}** (ตัวรถเป็นแบบชานต่ำ มีแรมป์ไฮโดรลิก และระบบล็อกล้อรถเข็นปลอดภัย)
             3. **🏁 จุดหมาย:** นั่งยาวไปลงรถ ณ จุดจอดเป้าหมายปลายทาง **{end_label_th.split(' (')[0]}** ได้ทันที
             """)
             
-        # แผนสำรอง (พ่วงต่อระบบเมื่อไม่มีรถเมล์สายตรง)
         else:
             st.warning("🔄 ไม่พบสายรถเมล์ที่วิ่งผ่านตรงๆ ต่อเดียว --- ระบบได้จัดแผนเดินทางเชื่อมต่อพ่วงระบบรถไฟฟ้าและรถแท็กซี่ให้ทดแทนอัตโนมัติ:")
             
