@@ -9,7 +9,7 @@ from sklearn.ensemble import RandomForestClassifier
 
 st.set_page_config(page_title="AI Accessibility Route Planner V6.4", layout="wide")
 
-# 🎨 [คงไว้ตามเดิม] สร้างพื้นที่ส่วนหัวข้อ (Header Banner) โดยนำ URL รูปภาพมาทำเป็นพื้นหลังด้วย CSS
+# 🎨 [คงไว้ตามเดิมทุกประการ] สร้างพื้นที่ส่วนหัวข้อ (Header Banner) โดยนำ URL รูปภาพมาทำเป็นพื้นหลังด้วย CSS
 header_html = """
 <style>
     .custom-header {
@@ -70,6 +70,12 @@ def haversine_distance(lat1, lon1, lat2, lon2):
     c = 2 * np.arcsin(np.sqrt(a))
     return 6367 * c * 1000
 
+# 📏 ฟังก์ชันสำหรับคำนวณระยะทางเดินแนวฉากจริง (Manhattan Distance บนเส้นทางเท้า)
+def manhattan_pedestrian_distance(lat1, lon1, lat2, lon2):
+    dist_lat = haversine_distance(lat1, lon1, lat2, lon1)
+    dist_lon = haversine_distance(lat2, lon1, lat2, lon2)
+    return dist_lat + dist_lon
+
 @st.cache_data
 def load_and_prepare_data():
     df_places = pd.read_csv('bangkok_places_bus_spot.csv')
@@ -123,7 +129,6 @@ th_name_base_map = {
     "Ekkamai Bus Terminal": "สถานีขนส่งเอกมัย"
 }
 
-# พจนานุกรมคีย์เวิร์ดภาษาไทยสำหรับเชื่อมโยงค้นหาตารางเดินรถเมล์
 bus_translation_dict = {
     "Victory Monument": ["อนุสาวรีย์", "รพ.ราชวิถี", "ราชวิถี"],
     "Chulalongkorn Hospital": ["จุฬาลงกรณ์", "สามย่าน", "รพ.จุฬา"],
@@ -144,17 +149,16 @@ for idx, row in df_places.iterrows():
     
     suffixes = []
     
-    # ตรวจสอบเงื่อนไข BTS
     df_bts_master['temp_dist'] = [haversine_distance(row['latitude'], row['longitude'], r['lat'], r['lng']) for i, r in df_bts_master.iterrows()]
     min_bts_dist = df_bts_master['temp_dist'].min()
     if "bts" in p_name.lower() or min_bts_dist <= 500:
         suffixes.append("BTS")
         
-    # ตรวจสอบสายรถเมล์ที่ผ่านสถานที่นี้
     keywords = bus_translation_dict.get(p_name, [p_name])
     local_bus_lines = []
     for b_idx, b_row in df_bus_routes.iterrows():
-        route_text = str(b_row['ต้นทาง']) + str(b_row['ปลาย']) + str(b_row['ผ่าน'])
+        # ป้องกันข้อผิดพลาดกรณีข้อมูลตารางเดินรถมีค่าว่าง (NaN)
+        route_text = str(b_row['ต้นทาง'] or '') + str(b_row['ปลาย'] or '') + str(b_row['ผ่าน'] or '')
         if any(k.lower() in route_text.lower() for k in keywords):
             local_bus_lines.append(str(b_row['สาย']).strip())
             
@@ -186,20 +190,26 @@ for i, name in enumerate(place_list_th):
 start_label_th = st.sidebar.selectbox("📍 เลือกจุดต้นทาง:", place_list_th, index=default_start_idx)
 end_label_th = st.sidebar.selectbox("🏁 เลือกจุดปลายทาง:", place_list_th, index=default_end_idx)
 
+if start_label_th == end_label_th:
+    st.error("⚠️ จุดต้นทางและปลายทางเป็นสถานที่เดียวกัน โปรดเลือกสถานที่ที่แตกต่างกันเพื่อคำนวณเส้นทางครับ")
+    st.stop()
+
 start_info = df_places[df_places['display_name_th'] == start_label_th].iloc[0]
 end_info = df_places[df_places['display_name_th'] == end_label_th].iloc[0]
 
 start_place_name = start_info['place_name']
 end_place_name = end_info['place_name']
 
-# 🔧 เพิ่มแถบเครื่องมือตรวจสอบสิ่งกีดขวางบนทางเท้าโดยใช้ AI ให้คะแนนความเสี่ยงอยู่เบื้องหลัง
+# 🔧 เชื่อมโยงสไลเดอร์หน้าบ้านเข้าสู่โมเดลคำนวณของ AI เบื้องหลังอย่างสมบูรณ์
 st.sidebar.write("---")
 st.sidebar.markdown("### 🦽 ตรวจสอบฟุตบาทภายนอกอาคารด้วย AI")
+sidewalk_width = st.sidebar.slider("📏 ความกว้างเฉลี่ยของทางเท้า (เมตร):", 0.5, 2.5, 1.5, step=0.1)
+surface_smoothness = st.sidebar.selectbox("🧱 สภาพพื้นผิวทางเท้าภายนอก:", ["เรียบสนิท/ลาดยางดี", "ขรุขระ/มีแผ่นกระเบื้องชำรุด"])
 simulated_obstacles = st.sidebar.slider("⚠️ จำนวนสิ่งกีดขวางบนทางเท้า (จุด):", 0, 5, 1)
 has_curb_ramp = st.sidebar.checkbox("📐 จุดตัดฟุตบาทมีทางลาดสำหรับรถเข็น", value=True)
 
 st.sidebar.write("---")
-st.sidebar.markdown("### 🚏 เลือกโหมดการเดินทาง")
+st.sidebar.markdown("### 𚏏 เลือกโหมดการเดินทาง")
 travel_mode = st.sidebar.radio(
     "โปรดเลือกรูปแบบการเดินทางหลักที่สะดวก:",
     [
@@ -214,9 +224,10 @@ matched_lines = []
 
 col1, col2 = st.columns([1, 2])
 
-# 🤖 [AI Focus] ดึงโมเดลมาวิเคราะห์ทำนายความปลอดภัยของทางเดินเท้าช่วงสั้น (First-Leg/Last-Leg Pedestrian Paths)
-# ดึงโอกาสผ่านได้ (Probability of Safety) ของผู้ใช้วีลแชร์
-ai_features = np.array([[1.5, 1 if simulated_obstacles < 3 else 0, simulated_obstacles, 1 if has_curb_ramp else 0]])
+# 🤖 ส่งค่าจาก UI ทั้งหมด เข้าประมวลผลใน AI Model จริงหลังบ้าน
+surface_val = 1 if "เรียบสนิท" in surface_smoothness else 0
+ramp_val = 1 if has_curb_ramp else 0
+ai_features = np.array([[sidewalk_width, surface_val, simulated_obstacles, ramp_val]])
 safety_probability = ai_model.predict_proba(ai_features)[0][1]
 
 with col1:
@@ -224,11 +235,10 @@ with col1:
     st.write(f"**จาก:** {start_label_th.split(' (')[0]}")
     st.write(f"**ถึง:** {end_label_th.split(' (')[0]}")
     
-    # 🤖 แสดงผลรายงานการประเมินทางเท้าของ AI ก่อนเข้าสู่การเดินทางหลัก
     if safety_probability >= 0.70:
-        st.success(f"🟢 **วิเคราะห์ทางเท้าโดย AI ({safety_probability*100:.0f}%):** ทางเท้ามีความปลอดภัย เข็นรถเข็นเข้าสู่ระบบขนส่งหลักได้สะดวก")
+        st.success(f"🟢 **วิเคราะห์ทางเท้าโดย AI ({safety_probability*100:.0f}%):** ทางเท้าอยู่ในเกณฑ์ดี ปลอดภัย เข็นรถเข็นเข้าสู่ระบบขนส่งหลักได้สะดวก")
     else:
-        st.error(f"🔴 **แจ้งเตือนความเสี่ยงโดย AI ({safety_probability*100:.0f}%):** ทางเท้ามีสิ่งกีดขวางหนาแน่นหรือขาดทางลาด กรุณาเข็นด้วยความระมัดระวัง")
+        st.error(f"🔴 **แจ้งเตือนความเสี่ยงโดย AI ({safety_probability*100:.0f}%):** ทางเท้ามีอุปสรรคหรือแคบเกินไป กรุณาเพิ่มความระมัดระวังเป็นพิเศษ")
         
     st.write("---")
 
@@ -240,8 +250,12 @@ with col1:
         df_bts_master['dist_end'] = [haversine_distance(end_info['latitude'], end_info['longitude'], r['lat'], r['lng']) for i, r in df_bts_master.iterrows()]
         nearest_bts_end = df_bts_master.sort_values(by='dist_end').iloc[0]
 
-        transport_first_leg = "🚶 เข็นวีลแชร์เดินเท้า" if nearest_bts_start['dist_start'] <= 150 else "🚖 แนะนำเรียกใช้บริการ แกร็บ (Grab) หรือ แท็กซี่"
-        transport_last_leg = "🚶 เข็นวีลแชร์เดินเท้า" if nearest_bts_end['dist_end'] <= 150 else "🚖 แนะนำเรียกใช้บริการ แกร็บ (Grab) หรือ แท็กซี่"
+        # 📏 คำนวณระยะเดินฉากจริง (Manhattan Distance) เพื่อแสดงผลตัวเลขให้ตรงกับแผนที่มุมฉาก
+        real_walk_start = manhattan_pedestrian_distance(start_info['latitude'], start_info['longitude'], nearest_bts_start['lat'], nearest_bts_start['lng'])
+        real_walk_end = manhattan_pedestrian_distance(nearest_bts_end['lat'], nearest_bts_end['lng'], end_info['latitude'], end_info['longitude'])
+
+        transport_first_leg = "🚶 เข็นวีลแชร์เดินเท้า" if real_walk_start <= 250 else "🚖 แนะนำเรียกใช้บริการ แกร็บ (Grab) หรือ แท็กซี่"
+        transport_last_leg = "🚶 เข็นวีลแชร์เดินเท้า" if real_walk_end <= 250 else "🚖 แนะนำเรียกใช้บริการ แกร็บ (Grab) หรือ แท็กซี่"
 
         has_lift_start = "มี" if str(nearest_bts_start['มีลิฟต์']).strip() in ['1', '1.0', 'มี', 'Yes'] else "ไม่มี"
         has_ramp_start = "มี" if str(nearest_bts_start['ทางลาดสำหรับรถเข็น']).strip() in ['1', '1.0', 'มี', 'Yes'] else "ไม่มี"
@@ -249,7 +263,7 @@ with col1:
         has_lift_end = "มี" if str(nearest_bts_end['มีลิฟต์']).strip() in ['1', '1.0', 'มี', 'Yes'] else "ไม่มี"
         has_ramp_end = "มี" if str(nearest_bts_end['ทางลาดสำหรับรถเข็น']).strip() in ['1', '1.0', 'มี', 'Yes'] else "ไม่มี"
 
-        st.info(f"**🟢 ขั้นที่ 1:** {transport_first_leg} ไปยัง **สถานีรถไฟฟ้า BTS {nearest_bts_start['clean_name']}** (ระยะทาง {nearest_bts_start['dist_start']:.1f} เมตร)")
+        st.info(f"**🟢 ขั้นที่ 1:** {transport_first_leg} ไปยัง **สถานีรถไฟฟ้า BTS {nearest_bts_start['clean_name']}** (ระยะเดินจริง {real_walk_start:.1f} เมตร)")
         st.write("ℹ️ **ข้อมูลสิ่งอำนวยความสะดวกสถานีต้นทาง:**")
         st.write(f"* มีลิฟต์วีลแชร์ = **{has_lift_start}** | มีทางลาดสำหรับรถเข็น = **{has_ramp_start}**")      
         st.write("")
@@ -257,7 +271,7 @@ with col1:
         if nearest_bts_start['clean_name'] != nearest_bts_end['clean_name']:
             st.info(f"**🔵 ขั้นที่ 2:** ขึ้นรถไฟฟ้า BTS เดินทางจากสถานี **{nearest_bts_start['clean_name']}** ไปลงที่สถานีเป้าหมาย **{nearest_bts_end['clean_name']}**")
         
-        st.info(f"**🔴 ขั้นที่ 3:** {transport_last_leg} จากสถานีรถไฟฟ้าปลายทางเข้าสู่พิกัดเป้าหมาย **{end_label_th.split(' (')[0]}** (ระยะทาง {nearest_bts_end['dist_end']:.1f} เมตร)")
+        st.info(f"**🔴 ขั้นที่ 3:** {transport_last_leg} จากสถานีรถไฟฟ้าปลายทางเข้าสู่พิกัดเป้าหมาย **{end_label_th.split(' (')[0]}** (ระยะเดินจริง {real_walk_end:.1f} เมตร)")
         st.write("ℹ️ **ข้อมูลสิ่งอำนวยความสะดวกสถานีปลายทาง:**")
         st.write(f"* มีลิฟต์วีลแชร์ = **{has_lift_end}** | มีทางลาดสำหรับรถเข็น = **{has_ramp_end}**")
 
@@ -269,7 +283,7 @@ with col1:
         end_keywords = bus_translation_dict.get(end_place_name, [end_place_name])
         
         for idx, row in df_bus_routes.iterrows():
-            route_text = str(row['ต้นทาง']) + str(row['ปลาย']) + str(row['ผ่าน'])
+            route_text = str(row['ต้นทาง'] or '') + str(row['ปลาย'] or '') + str(row['ผ่าน'] or '')
             if any(k.lower() in route_text.lower() for k in start_keywords) and any(k.lower() in route_text.lower() for k in end_keywords):
                 matched_lines.append(str(row['สาย']).strip())
 
@@ -294,11 +308,14 @@ with col1:
             df_bts_master['dist_end'] = [haversine_distance(end_info['latitude'], end_info['longitude'], r['lat'], r['lng']) for i, r in df_bts_master.iterrows()]
             nearest_bts_end = df_bts_master.sort_values(by='dist_end').iloc[0]
             
+            real_walk_start = manhattan_pedestrian_distance(start_info['latitude'], start_info['longitude'], nearest_bts_start['lat'], nearest_bts_start['lng'])
+            real_walk_end = manhattan_pedestrian_distance(nearest_bts_end['lat'], nearest_bts_end['lng'], end_info['latitude'], end_info['longitude'])
+
             st.markdown(f"""
             **🗺️ แผนการเดินทางพ่วงเชื่อมต่ออัจฉริยะ (รถรับจ้าง + รถไฟฟ้า BTS + แกร็บวีลแชร์):**
-            * **🟢 ช่วงที่ 1 (เข้าสู่สถานีรถไฟฟ้า):** เดินทางจากจุดเริ่มต้นไปยัง **สถานีรถไฟฟ้า BTS {nearest_bts_start['clean_name']}** (ระยะทางประมาณ {nearest_bts_start['dist_start']:.1f} เมตร แนะนำเรียกบริการ **แกร็บวีลแชร์ (GrabAssist)** หรือแท็กซี่หากเดินทางบนทางเท้าไม่สะดวก)
+            * **🟢 ช่วงที่ 1 (เข้าสู่สถานีรถไฟฟ้า):** เดินทางจากจุดเริ่มต้นไปยัง **สถานีรถไฟฟ้า BTS {nearest_bts_start['clean_name']}** (ระยะทางประมาณ {real_walk_start:.1f} เมตร แนะนำเรียกบริการ **แกร็บวีลแชร์ (GrabAssist)** หรือแท็กซี่หากเดินทางบนทางเท้าไม่สะดวก)
             * **🔵 ช่วงที่ 2 (เดินทางด้วยระบบรางด่วน):** ใช้ลิฟต์อารยสถาปัตย์เพื่อขึ้นสู่สถานี นั่งรถไฟฟ้า BTS จากสถานี **{nearest_bts_start['clean_name']}** มุ่งหน้าไปลงที่สถานีปลายทาง **{nearest_bts_end['clean_name']}** *(มีสิ่งอำนวยความสะดวกสำหรับผู้พิการครบครัน)*
-            * **🔴 ช่วงที่ 3 (เข้าสู่เป้าหมายปลายทาง):** ลงจากสถานีรถไฟฟ้า และเรียกรถ **แกร็บ (Grab) / แท็กซี่** เข้าสู่พิกัดเป้าหมาย **{end_label_th.split(' (')[0]}** (ระยะทาง {nearest_bts_end['dist_end']:.1f} เมตร)
+            * **🔴 ช่วงที่ 3 (เข้าสู่เป้าหมายปลายทาง):** ลงจากสถานีรถไฟฟ้า และเรียกรถ **แกร็บ (Grab) / แท็กซี่** เข้าสู่พิกัดเป้าหมาย **{end_label_th.split(' (')[0]}** (ระยะทาง {real_walk_end:.1f} เมตร)
             """)
 
     # 🏥 3. โหมดสวัสดิการรถตู้รัฐ
@@ -327,22 +344,19 @@ with col2:
     folium.Marker([start_info['latitude'], start_info['longitude']], popup=f"ต้นทาง: {start_label_th.split(' (')[0]}", icon=folium.Icon(color='orange', icon='play', prefix='fa')).add_to(m)
     folium.Marker([end_info['latitude'], end_info['longitude']], popup=f"ปลายทาง: {end_label_th.split(' (')[0]}", icon=folium.Icon(color='green', icon='flag', prefix='fa')).add_to(m)
     
-    # 🚶 ----------------------------------------------------------------------------------
-    # ฟีเจอร์แก้ไขการนำทาง: ตัดเส้นทางถนนใหญ่ทิ้ง และปรับการลากเส้นทางเท้าให้เป็นตรรกะมุมฉาก (No Roads / Pedestrian Only)
-    # ไม่ลากผ่ากลางสิ่งปลูกสร้าง พร้อมปรับสีเส้นฟุตบาทตามระดับความปลอดภัยของ AI เบื้องหลัง
-    # ----------------------------------------------------------------------------------
-    pedestrian_line_color = 'emerald' if safety_probability >= 0.70 else 'red'
+    # 🎨 แก้ไขบั๊กของ Folium ปรับสีจาก 'emerald' เป็น 'green' และ 'red' เพื่อให้ระบบเสถียรและแผนที่ยอมวาดเส้น
+    pedestrian_line_color = 'green' if safety_probability >= 0.70 else 'red'
     
-    # สร้างจุดเลี้ยวฉาก 90 องศา (Manhattan Routing) เพื่อบังคับให้เส้นทางเดินอ้อมเลียบขอบอาคารภายนอก
+    # วาดแผนที่โครงข่ายขอบทางเท้าอ้อมสิ่งปลูกสร้าง (Manhattan Grid Routing)
     footpath_segment_start = [
         [start_info['latitude'], start_info['longitude']],
-        [start_info['latitude'], nearest_bts_start['lng']], # พิกัดจุดตัดขอบมุมตึกบล็อกทางเท้า
+        [start_info['latitude'], nearest_bts_start['lng']], 
         [nearest_bts_start['lat'], nearest_bts_start['lng']]
     ]
     
     footpath_segment_end = [
         [nearest_bts_end['lat'], nearest_bts_end['lng']],
-        [nearest_bts_end['lat'], end_info['longitude']],    # พิกัดจุดตัดขอบมุมตึกปลายทาง
+        [nearest_bts_end['lat'], end_info['longitude']],    
         [end_info['latitude'], end_info['longitude']]
     ]
     
@@ -350,14 +364,10 @@ with col2:
         folium.Marker([nearest_bts_start['lat'], nearest_bts_start['lng']], popup=f"สถานีรถไฟฟ้า BTS ต้นทาง", icon=folium.Icon(color='blue', icon='train', prefix='fa')).add_to(m)
         folium.Marker([nearest_bts_end['lat'], nearest_bts_end['lng']], popup=f"สถานีรถไฟฟ้า BTS ปลายทาง", icon=folium.Icon(color='blue', icon='train', prefix='fa')).add_to(m)
         
-        # วาดเฉพาะแนวทางเดินเท้าช่วงสั้นเชื่อมต่อเข้าสถานี (First-Leg / Last-Leg Footpaths) 
-        folium.PolyLine(footpath_segment_start, color=pedestrian_line_color, weight=6, tooltip="เส้นทางเข็นวีลแชร์บนทางเท้า/ฟุตบาทภายนอกอาคาร").add_to(m)
-        folium.PolyLine(footpath_segment_end, color='darkgreen', weight=6, tooltip="เส้นทางเท้าเข้าสู่เป้าหมายสุดท้าย").add_to(m)
-        
-        # วาดเส้นทางรถไฟฟ้าหลัก
-        folium.PolyLine([[nearest_bts_start['lat'], nearest_bts_start['lng']], [nearest_bts_end['lat'], nearest_bts_end['lng']]], color='blue', weight=6, tooltip="แนวเส้นทางเดินรถไฟฟ้าเชื่อมต่อพ่วงระบบ").add_to(m)
+        folium.PolyLine(footpath_segment_start, color=pedestrian_line_color, weight=6, tooltip="เส้นทางเข็นวีลแชร์บนทางเท้าภายนอกอาคาร (ขาก้าวเข้าสู่ระบบ)").add_to(m)
+        folium.PolyLine(footpath_segment_end, color='darkgreen', weight=6, tooltip="เส้นทางเท้าเข้าสู่เป้าหมายสุดท้าย (ขาเดินออกจากระบบ)").add_to(m)
+        folium.PolyLine([[nearest_bts_start['lat'], nearest_bts_start['lng']], [nearest_bts_end['lat'], nearest_bts_end['lng']]], color='blue', weight=6, tooltip="แนวเส้นทางเดินรถไฟฟ้า").add_to(m)
     else:
-        # กรณีรถเมล์ต่อเดียวหรือโหมดอื่น ปรับให้เป็นเส้นหักเหลี่ยมตามทางเท้าอ้อมสิ่งปลูกสร้างเช่นกัน
         bus_footpath_route = [
             [start_info['latitude'], start_info['longitude']],
             [start_info['latitude'], end_info['longitude']],
