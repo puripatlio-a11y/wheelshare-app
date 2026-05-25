@@ -1,5 +1,5 @@
 """
-AI Accessibility Route Planner for Wheelchair Users — Version 7.0
+AI Accessibility Route Planner for Wheelchair Users — Version 7.1 (Fixed Path Error)
 แก้ไขตามคำแนะนำอาจารย์:
   1. แสดงเส้นทางเดินเท้า (pedestrian path) บนแผนที่จริง
   2. ระบุ AI Function ชัดเจน (Random Forest สำหรับแนะนำเส้นทาง)
@@ -56,20 +56,22 @@ def haversine(lat1, lon1, lat2, lon2):
     a = np.sin(dlat/2)**2 + np.cos(lat1)*np.cos(lat2)*np.sin(dlon/2)**2
     return 6371000 * 2 * np.arcsin(np.sqrt(a))
 
-# ─── โหลดข้อมูล ──────────────────────────────────────────────────────────────
+# ─── โหลดข้อมูล (แก้ไขระบบ Path อัตโนมัติ) ───────────────────────────────────
 @st.cache_data
 def load_all_data():
-    base = "/mnt/user-data/uploads"
+    # ดึงพิกัดที่อยู่ของไฟล์ app.py ในปัจจุบัน (รองรับทั้งคอมตัวเองและ Cloud เซิร์ฟเวอร์)
+    current_dir = os.path.dirname(os.path.abspath(__file__))
+    base = os.path.join(current_dir, "data") 
 
     # สถานที่หลัก
-    df_places = pd.read_csv(f"{base}/bangkok_places_bus_spot.csv")
+    df_places = pd.read_csv(os.path.join(base, "bangkok_places_bus_spot.csv"))
 
-    # สถานี BTS พิกัด
-    df_stations = pd.read_csv(f"{base}/bts_station.csv")
+    #  สถานี BTS พิกัด
+    df_stations = pd.read_csv(os.path.join(base, "bts_station.csv"))
     df_stations['clean_name'] = df_stations['name'].str.replace('สถานี', '').str.strip()
 
     # ข้อมูลอารยสถาปัตย์ BTS (สายสีเขียว)
-    df_acc = pd.read_csv(f"{base}/BTS_for_wheelchair_users_spreadsheet_-_BTS_green_line.csv")
+    df_acc = pd.read_csv(os.path.join(base, "BTS_for_wheelchair_users_spreadsheet_-_BTS_green_line.csv"))
     df_acc['clean_name'] = df_acc['สถานี'].str.replace('สถานี', '').str.strip()
 
     # รวม BTS master
@@ -79,23 +81,25 @@ def load_all_data():
     ).drop_duplicates(subset=['clean_name']).reset_index(drop=True)
 
     # ป้ายรถเมล์ (พิกัด)
-    df_bus_stops = pd.read_csv(f"{base}/bangkok_bus_stops_coordinates.csv")
+    df_bus_stops = pd.read_csv(os.path.join(base, "bangkok_bus_stops_coordinates.csv"))
 
     # ข้อมูลผู้โดยสาร (ใช้แสดง insight ความหนาแน่น)
-    df_passenger = pd.read_csv(f"{base}/bangkok_transit_passenger_data__1_.csv")
+    df_passenger = pd.read_csv(os.path.join(base, "bangkok_transit_passenger_data__1_.csv"))
 
     # ข้อมูล Random Forest training
-    df_rf = pd.read_csv(f"{base}/wheelchair_random_forest_300rows.csv")
+    df_rf = pd.read_csv(os.path.join(base, "wheelchair_random_forest_300rows.csv"))
 
     # สายรถเมล์ (ถ้ามี)
     df_bus_routes = None
-    for fname in os.listdir(base):
-        if 'SmileBus' in fname or 'SmalieBus' in fname:
-            df_bus_routes = pd.read_csv(f"{base}/{fname}")
-            break
+    if os.path.exists(base):
+        for fname in os.listdir(base):
+            if 'SmileBus' in fname or 'SmalieBus' in fname:
+                df_bus_routes = pd.read_csv(os.path.join(base, fname))
+                break
 
     return df_places, df_bts, df_bus_stops, df_passenger, df_rf, df_bus_routes
 
+# ดึงข้อมูลมาใช้งาน
 df_places, df_bts, df_bus_stops, df_passenger, df_rf, df_bus_routes = load_all_data()
 
 # ─── 🤖 AI FUNCTION: Train Random Forest Model ───────────────────────────────
@@ -485,9 +489,9 @@ with col_map:
     ).add_to(m)
 
     walk_start_dist = haversine(start_info['latitude'], start_info['longitude'],
-                                bts_start['lat'], bts_start['lng'])
+                                 bts_start['lat'], bts_start['lng'])
     walk_end_dist   = haversine(end_info['latitude'], end_info['longitude'],
-                                bts_end['lat'],   bts_end['lng'])
+                                 bts_end['lat'],   bts_end['lng'])
 
     if "🚇" in travel_mode or ("🚌" in travel_mode and len(bus_near_start) == 0):
         # สถานี BTS ต้นทาง
@@ -630,4 +634,4 @@ with col_b:
     st.bar_chart(imp_df.set_index('ตัวแปร')['ความสำคัญ'], use_container_width=True, height=280)
 
 st.markdown("---")
-st.caption("🤖 AI ขับเคลื่อนด้วย Random Forest (sklearn) | ข้อมูล: BTS Accessibility, Bus Stops, Passenger Data Bangkok | V7.0")
+st.caption("🤖 AI ขับเคลื่อนด้วย Random Forest (sklearn) | ข้อมูล: BTS Accessibility, Bus Stops, Passenger Data Bangkok | V7.1")
