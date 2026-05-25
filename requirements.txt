@@ -4,3 +4,6 @@ numpy
 folium
 streamlit-folium
 scikit-learn
+networkx
+osmnx
+geopy
