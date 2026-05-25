@@ -1,6 +1,6 @@
 """
-AI Accessibility Route Planner for Wheelchair Users — Version 7.2 (Robust Path & File Matcher)
-แก้ไขปัญหา FileNotFoundError บน Streamlit Cloud ด้วยระบบค้นหาไฟล์อัจฉริยะ (Case & Space Insensitive)
+AI Accessibility Route Planner for Wheelchair Users — Version 7.3 (Final Clean Path Fix)
+แก้ไขปัญหา FileNotFoundError โดยการเพิ่ม Keyword-Based Matcher ดักจับไฟล์ passenger__1_ และ ThaiSmalieBus
 """
 
 import streamlit as st
@@ -16,7 +16,7 @@ from streamlit_folium import st_folium
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.preprocessing import LabelEncoder
 
-st.set_page_config(page_title="AI Accessibility Route Planner V7.2", layout="wide", page_icon="♿")
+st.set_page_config(page_title="AI Accessibility Route Planner V7.3", layout="wide", page_icon="♿")
 
 # ─── Header ──────────────────────────────────────────────────────────────────
 header_html = """
@@ -51,83 +51,79 @@ def haversine(lat1, lon1, lat2, lon2):
     a = np.sin(dlat/2)**2 + np.cos(lat1)*np.cos(lat2)*np.sin(dlon/2)**2
     return 6371000 * 2 * np.arcsin(np.sqrt(a))
 
-# ─── 🛠️ โหมดค้นหาไฟล์อัจฉริยะ ป้องกันปัญหาชื่อไฟล์ไม่ตรง ─────────────────────────
+# ─── 🛠️ โหมดค้นหาไฟล์อัจฉริยะ ป้องกันปัญหาชื่อไฟล์ไม่ตรงและชื่อมีเลขห้อยท้าย ───
 @st.cache_data
 def load_all_data():
     current_dir = os.path.dirname(os.path.abspath(__file__))
     
-    # รวบรวมไฟล์ทั้งหมดที่มีอยู่ในโฟลเดอร์หลัก และโฟลเดอร์ย่อย (เช่น data, Data)
+    # สแกนไฟล์ทั้งหมดที่มีในระบบเพื่อทำ Map
     all_files_map = {}
     for root, dirs, files in os.walk(current_dir):
         for f in files:
-            # ทำความสะอาดชื่อไฟล์เพื่อใช้ในการสแกน (ทำเป็นพิมพ์เล็ก และลบพวกสัญลักษณ์พิเศษ/เว้นวรรคออก)
+            # ทำความสะอาดคีย์: แปลงเป็นตัวพิมพ์เล็กและดึงเฉพาะตัวอักษรกับตัวเลข
             clean_key = re.sub(r'[^a-z0-9]', '', f.lower())
             all_files_map[clean_key] = os.path.join(root, f)
 
-    def find_file(target_name):
-        """ค้นหาไฟล์แบบยืดหยุ่นสูง เพื่อป้องกันเคสพิมพ์เล็กใหญ่หรือเว้นวรรคพลาด"""
-        clean_target = re.sub(r'[^a-z0-9]', '', target_name.lower())
+    def find_file_by_keyword(keyword_target):
+        """ค้นหาไฟล์ผ่าน Key หลัก ป้องกันปัญหาชื่อไฟล์ห้อยท้ายพวก __1__ หรือมีเว้นวรรคแปลกๆ"""
+        clean_target = re.sub(r'[^a-z0-9]', '', keyword_target.lower())
         
-        # 1. ค้นหาแบบตรงตัวจากฐานข้อมูลไฟล์ที่สแกนไว้
+        # 1. เช็คว่ามีคีย์ตรงๆ ไหม
         if clean_target in all_files_map:
             return all_files_map[clean_target]
             
-        # 2. ค้นหาแบบบางส่วน (Partial Match) เผื่อชื่อไฟล์ยาวจัดแล้วพิมพ์ไม่ครบ
+        # 2. เช็คแบบ Partial Match (เช่น ส่ง 'passenger' ไปหาเจอรหัส 'bangkoktransitpassengerdata1csv')
         for key, full_path in all_files_map.items():
             if clean_target in key or key in clean_target:
                 return full_path
                 
-        # Fallback กรณีหาไม่เจอจริงๆ ให้คืนค่า path เริ่มต้นแบบเดาทางไว้ก่อน
-        return os.path.join(current_dir, target_name)
+        # คืนค่า Default หากเกิดเหตุสุดวิสัยหาไม่เจอจริงๆ
+        return os.path.join(current_dir, keyword_target)
 
-    # ─── เริ่มต้นโหลดข้อมูลจากไฟล์จริงที่อัปโหลดไว้ ───
+    # ─── เริ่มต้นโหลดข้อมูลจากไฟล์ (ใช้ Keyword Matcher ทั้งหมดเพื่อความชัวร์) ───
     
     # 1. ข้อมูลสถานที่หลักในกรุงเทพฯ
-    df_places = pd.read_csv(find_file("bangkok_places_bus_spot.csv"))
+    df_places = pd.read_csv(find_file_by_keyword("bangkok_places_bus_spot.csv"))
 
     # 2. พิกัดสถานี BTS
-    df_stations = pd.read_csv(find_file("bts_station.csv"))
+    df_stations = pd.read_csv(find_file_by_keyword("bts_station.csv"))
     df_stations['clean_name'] = df_stations['name'].str.replace('สถานี', '').str.strip()
 
-    # 3. ข้อมูลสิ่งอำนวยความสะดวก/อารยสถาปัตย์ BTS (รองรับทั้งเวอร์ชันขีดล่างและเว้นวรรค)
-    df_acc = pd.read_csv(find_file("BTS_for_wheelchair_users_spreadsheet_-_BTS_green_line.csv"))
+    # 3. ข้อมูลสิ่งอำนวยความสะดวก/อารยสถาปัตย์ BTS ของผู้พิการ
+    df_acc = pd.read_csv(find_file_by_keyword("BTS for wheelchair users spreadsheet"))
     df_acc['clean_name'] = df_acc['สถานี'].str.replace('สถานี', '').str.strip()
 
-    # รวมข้อมูล BTS พิกัด + อารยสถาปัตย์เข้าด้วยกัน
+    # รวมข้อมูล BTS
     df_bts = pd.merge(
         df_acc, df_stations[['clean_name', 'lat', 'lng', 'btsline', 'location']],
         on='clean_name', how='inner'
     ).drop_duplicates(subset=['clean_name']).reset_index(drop=True)
 
     # 4. ข้อมูลพิกัดป้ายรถเมล์
-    df_bus_stops = pd.read_csv(find_file("bangkok_bus_stops_coordinates.csv"))
+    df_bus_stops = pd.read_csv(find_file_by_keyword("bangkok_bus_stops_coordinates.csv"))
 
-    # 5. ข้อมูลสถิติจำนวนผู้โดยสาร
-    # ตรวจสอบชื่อไฟล์ให้ยืดหยุ่นรองรับตัวเลขห้อยท้ายเช่น __1_
-    df_passenger = pd.read_csv(find_file("bangkok_transit_passenger_data.csv"))
+    # 5. ข้อมูลสถิติจำนวนผู้โดยสาร (แก้บั๊ก __1__ ดึงผ่านคีย์คำว่า passenger)
+    df_passenger = pd.read_csv(find_file_by_keyword("passenger"))
 
     # 6. ข้อมูลสำหรับเทรนโมเดล AI Random Forest
-    df_rf = pd.read_csv(find_file("wheelchair_random_forest_300rows.csv"))
+    df_rf = pd.read_csv(find_file_by_keyword("wheelchair_random_forest_300rows.csv"))
 
-    # 7. ค้นหาสายรถเมล์ของไทยสมายล์บัส (Thai Smile Bus)
+    # 7. สายรถเมล์ของไทยสมายล์บัส (ดึงผ่านคีย์คำว่า ThaiSmalieBus)
     df_bus_routes = None
-    bus_route_path = find_file("ThaiSmalieBus") # ค้นหาแบบชื่อย่อบางส่วน
+    bus_route_path = find_file_by_keyword("ThaiSmalieBus")
     if os.path.exists(bus_route_path):
         df_bus_routes = pd.read_csv(bus_route_path)
 
     return df_places, df_bts, df_bus_stops, df_passenger, df_rf, df_bus_routes
 
-# เรียกใช้ฟังก์ชันดึงข้อมูลที่มีระบบป้องกันความผิดพลาดสูง
+# เรียกใช้ฟังก์ชันดึงข้อมูลที่มีระบบแมตช์คำอัจฉริยะ
 df_places, df_bts, df_bus_stops, df_passenger, df_rf, df_bus_routes = load_all_data()
 
 
 # ─── 🤖 AI FUNCTION: Train Random Forest Model ───────────────────────────────
 @st.cache_resource
 def train_random_forest(df_rf):
-    """
-    AI Function: เทรน Random Forest Classifier จากข้อมูล wheelchair_random_forest_300rows.csv
-    เพื่อทำนายความเหมาะสมของเส้นทาง (Recommended: 1=แนะนำ, 0=ไม่แนะนำ)
-    """
+    """AI Function: เทรน Random Forest Classifier เพื่อทำนาย Recommended (1=แนะนำ, 0=ไม่แนะนำ)"""
     le = LabelEncoder()
     df = df_rf.copy()
     df['Transport_Type_enc'] = le.fit_transform(df['Transport_Type'])
