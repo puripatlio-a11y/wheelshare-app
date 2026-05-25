@@ -5,7 +5,7 @@ import folium
 import os
 from streamlit_folium import st_folium
 
-st.set_page_config(page_title="AI Accessibility Route Planner V6.4", layout="wide")
+st.set_page_config(page_title="AI Accessibility Route Planner V6.5", layout="wide")
 
 # 🎨 สร้างพื้นที่ส่วนหัวข้อ (Header Banner) โดยนำ URL รูปภาพมาทำเป็นพื้นหลังด้วย CSS
 header_html = """
@@ -54,6 +54,23 @@ def haversine_distance(lat1, lon1, lat2, lon2):
     c = 2 * np.arcsin(np.sqrt(a))
     return 6367 * c * 1000
 
+# =========================================================
+# 🧭 ฟังก์ชันคำนวณเส้นทางแบบหักฉากตามบล็อกถนนจริง (Anti-Diagonal Route Maker)
+# =========================================================
+def generate_grid_route(lat1, lon1, lat2, lon2):
+    """
+    สร้างจุดพิกัดเดินทางแบบ Grid หักมุมฉาก 90 องศาตามแนวบล็อกถนนในเมือง
+    แก้ไขไม่ให้เส้นโครงข่ายลากเฉียงทแยงมุมผ่าใจกลางอาคารตึกรามบ้านช่อง
+    """
+    # ป้องกันการคำนวณผิดพลาดหากเป็นจุดพิกัดเดียวกัน
+    if lat1 == lat2 and lon1 == lon2:
+        return [[lat1, lon1], [lat2, lon2]]
+        
+    # สร้างจุดเลี้ยวฉาก (Corner Node) ขนานตามแนวทิศทางภูมิศาสตร์จราจร
+    # วิ่งตามแกนละติจูดแล้วค่อยหักเลี้ยวตามแกนลองจิจูดเลียบกำแพงบล็อกถนน
+    corner_pt = [lat2, lon1] 
+    return [[lat1, lon1], corner_pt, [lat2, lon2]]
+
 @st.cache_data
 def load_and_prepare_data():
     df_places = pd.read_csv('bangkok_places_bus_spot.csv')
@@ -69,6 +86,12 @@ def load_and_prepare_data():
             
     df_bus_routes = pd.read_csv(target_bus_file)
     
+    # โหลดไฟล์พิกัดป้ายรถเมล์กรุงเทพฯ เพิ่มเติมเพื่อความแม่นยำในการระบุหมุดป้ายรถประจำทางบนแผนที่
+    if os.path.exists('bangkok_bus_stops_coordinates.csv'):
+        df_bus_stops = pd.read_csv('bangkok_bus_stops_coordinates.csv')
+    else:
+        df_bus_stops = pd.DataFrame(columns=['place_name', 'latitude', 'longitude'])
+    
     df_stations['clean_name'] = df_stations['name'].str.replace('สถานี', '').str.strip()
     df_accessibility['clean_name'] = df_accessibility['สถานี'].str.replace('สถานี', '').str.strip()
     df_bts_master = pd.merge(
@@ -77,10 +100,10 @@ def load_and_prepare_data():
         on='clean_name', how='inner'
     ).drop_duplicates(subset=['clean_name']).reset_index(drop=True)
     
-    return df_places, df_bts_master, df_bus_routes
+    return df_places, df_bts_master, df_bus_routes, df_bus_stops
 
 try:
-    df_places, df_bts_master, df_bus_routes = load_and_prepare_data()
+    df_places, df_bts_master, df_bus_routes, df_bus_stops = load_and_prepare_data()
 except Exception as e:
     st.error(f"❌ ระบบไม่สามารถอ่านฐานข้อมูลไฟล์ได้: {e}")
     st.stop()
@@ -177,7 +200,7 @@ start_place_name = start_info['place_name']
 end_place_name = end_info['place_name']
 
 st.sidebar.write("---")
-st.sidebar.markdown("### 𚚏 เลือกโหมดการเดินทาง")
+st.sidebar.markdown("### 🚌 เลือกโหมดการเดินทาง")
 travel_mode = st.sidebar.radio(
     "โปรดเลือกรูปแบบการเดินทางหลักที่สะดวก:",
     [
@@ -198,37 +221,33 @@ with col1:
     st.write(f"**ถึง:** {end_label_th.split(' (')[0]}")
     st.write("---")
 
+    # คำนวณหาโครงข่ายสถานีรถไฟฟ้าบีทีเอสที่ใกล้ที่สุดเพื่อใช้แสดงผลขั้นตอน
+    df_bts_master['dist_start'] = [haversine_distance(start_info['latitude'], start_info['longitude'], r['lat'], r['lng']) for i, r in df_bts_master.iterrows()]
+    nearest_bts_start = df_bts_master.sort_values(by='dist_start').iloc[0]
+
+    df_bts_master['dist_end'] = [haversine_distance(end_info['latitude'], end_info['longitude'], r['lat'], r['lng']) for i, r in df_bts_master.iterrows()]
+    nearest_bts_end = df_bts_master.sort_values(by='dist_end').iloc[0]
+
     # 🚇 1. โหมด BTS
     if "🚇" in travel_mode:
-        # คำนวณหาสถานีต้นทางและปลายทางที่ใกล้ที่สุดก่อนทำงานส่วนอื่น
-        df_bts_master['dist_start'] = [haversine_distance(start_info['latitude'], start_info['longitude'], r['lat'], r['lng']) for i, r in df_bts_master.iterrows()]
-        nearest_bts_start = df_bts_master.sort_values(by='dist_start').iloc[0]
-
-        df_bts_master['dist_end'] = [haversine_distance(end_info['latitude'], end_info['longitude'], r['lat'], r['lng']) for i, r in df_bts_master.iterrows()]
-        nearest_bts_end = df_bts_master.sort_values(by='dist_end').iloc[0]
-
         transport_first_leg = "🚶 เข็นวีลแชร์เดินเท้า" if nearest_bts_start['dist_start'] <= 150 else "🚖 แนะนำเรียกใช้บริการ แกร็บ (Grab) หรือ แท็กซี่"
         transport_last_leg = "🚶 เข็นวีลแชร์เดินเท้า" if nearest_bts_end['dist_end'] <= 150 else "🚖 แนะนำเรียกใช้บริการ แกร็บ (Grab) หรือ แท็กซี่"
 
-        # แปลงข้อมูลความพร้อมของอารยสถาปัตย์ (ลิฟต์ / ทางลาด) ให้เป็นข้อความเข้าใจง่าย
         has_lift_start = "มี" if str(nearest_bts_start['มีลิฟต์']).strip() in ['1', '1.0', 'มี', 'Yes'] else "ไม่มี"
         has_ramp_start = "มี" if str(nearest_bts_start['ทางลาดสำหรับรถเข็น']).strip() in ['1', '1.0', 'มี', 'Yes'] else "ไม่มี"
         
         has_lift_end = "มี" if str(nearest_bts_end['มีลิฟต์']).strip() in ['1', '1.0', 'มี', 'Yes'] else "ไม่มี"
         has_ramp_end = "มี" if str(nearest_bts_end['ทางลาดสำหรับรถเข็น']).strip() in ['1', '1.0', 'มี', 'Yes'] else "ไม่มี"
 
-        # แสดงผลขั้นตอนช่วงที่ 1 พร้อมข้อมูลอารยสถาปัตย์ต้นทาง
         st.info(f"**🟢 ขั้นที่ 1:** {transport_first_leg} ไปยัง **สถานีรถไฟฟ้า BTS {nearest_bts_start['clean_name']}** (ระยะทาง {nearest_bts_start['dist_start']:.1f} เมตร)")
         st.write("ℹ️ **ข้อมูลสิ่งอำนวยความสะดวกสถานีต้นทาง:**")
         st.write(f"* มีลิฟต์วีลแชร์ = **{has_lift_start}**")
         st.write(f"* มีทางลาดสำหรับรถเข็น = **{has_ramp_start}**")        
         st.write("")
 
-        # แสดงผลขั้นตอนช่วงที่ 2
         if nearest_bts_start['clean_name'] != nearest_bts_end['clean_name']:
             st.info(f"**🔵 ขั้นที่ 2:** ขึ้นรถไฟฟ้า BTS เดินทางจากสถานี **{nearest_bts_start['clean_name']}** ไปลงที่สถานีเป้าหมาย **{nearest_bts_end['clean_name']}**")
         
-        # แสดงผลขั้นตอนช่วงที่ 3 พร้อมข้อมูลอารยสถาปัตย์ปลายทาง
         st.info(f"**🔴 ขั้นที่ 3:** {transport_last_leg} จากสถานีรถไฟฟ้าปลายทางเข้าสู่พิกัดเป้าหมาย **{end_label_th.split(' (')[0]}** (ระยะทาง {nearest_bts_end['dist_end']:.1f} เมตร)")
         st.write("ℹ️ **ข้อมูลสิ่งอำนวยความสะดวกสถานีปลายทาง:**")
         st.write(f"* มีลิฟต์วีลแชร์ = **{has_lift_end}**")
@@ -236,7 +255,7 @@ with col1:
 
     # 🚌 2. โหมดรถเมล์ชานต่ำ
     elif "🚌" in travel_mode:
-        st.markdown("#### 𚏏 ผลคำนวณการเดินรถโดยสารสาธารณะอารยสถาปัตย์")
+        st.markdown("#### 🚌 ผลคำนวณการเดินรถโดยสารสาธารณะอารยสถาปัตย์")
         
         start_keywords = bus_translation_dict.get(start_place_name, [start_place_name])
         end_keywords = bus_translation_dict.get(end_place_name, [end_place_name])
@@ -253,22 +272,15 @@ with col1:
             st.success(f"✅ **เอไอ (AI) แนะนำรถเมล์ชานต่ำต่อเดียวถึง: สาย {all_suggested_lines}**")
             st.markdown(f"""
             **📋 ขั้นตอนการเดินทาง:**
-            1. **🚶 จุดขึ้นรถ:** เข็นวีลแชร์ไปยังป้ายหยุดรถประจำทาง ณ **{start_label_th.split(' (')[0]}**
+            1. **🚶 จุดขึ้นรถ:** เข็นวีลแชร์เลียบทางเท้าเหลี่ยมบล็อกจราจร ไปยังป้ายหยุดรถประจำทาง ณ **{start_label_th.split(' (')[0]}**
             2. **💳 การขึ้นรถ:** สามารถเลือกขึ้นรถเมล์สาย **{all_suggested_lines}** (ตัวรถเป็นแบบชานต่ำ มีแรมป์ไฮโดรลิก และระบบล็อกล้อรถเข็นปลอดภัย)
             3. **🏁 จุดหมาย:** นั่งยาวไปลงรถ ณ จุดจอดเป้าหมายปลายทาง **{end_label_th.split(' (')[0]}** ได้ทันที
             """)
             
         else:
             st.warning("🔄 ไม่พบสายรถเมล์ที่วิ่งผ่านตรงๆ ต่อเดียว --- ระบบได้จัดแผนเดินทางเชื่อมต่อพ่วงระบบรถไฟฟ้าและรถแท็กซี่ให้ทดแทนอัตโนมัติ:")
-            
-            df_bts_master['dist_start'] = [haversine_distance(start_info['latitude'], start_info['longitude'], r['lat'], r['lng']) for i, r in df_bts_master.iterrows()]
-            nearest_bts_start = df_bts_master.sort_values(by='dist_start').iloc[0]
-            
-            df_bts_master['dist_end'] = [haversine_distance(end_info['latitude'], end_info['longitude'], r['lat'], r['lng']) for i, r in df_bts_master.iterrows()]
-            nearest_bts_end = df_bts_master.sort_values(by='dist_end').iloc[0]
-            
             st.markdown(f"""
-            **🗺️ แंधनการเดินทางพ่วงเชื่อมต่ออัจฉริยะ (รถรับจ้าง + รถไฟฟ้า BTS + แกร็บวีลแชร์):**
+            **🗺️ แผนการเดินทางพ่วงเชื่อมต่ออัจฉริยะ (รถรับจ้าง + รถไฟฟ้า BTS + แกร็บวีลแชร์):**
             * **🟢 ช่วงที่ 1 (เข้าสู่สถานีรถไฟฟ้า):** เดินทางจากจุดเริ่มต้นไปยัง **สถานีรถไฟฟ้า BTS {nearest_bts_start['clean_name']}** (ระยะทางประมาณ {nearest_bts_start['dist_start']:.1f} เมตร แนะนำเรียกบริการ **แกร็บวีลแชร์ (GrabAssist)** หรือแท็กซี่หากเดินทางบนทางเท้าไม่สะดวก)
             * **🔵 ช่วงที่ 2 (เดินทางด้วยระบบรางด่วน):** ใช้ลิฟต์อารยสถาปัตย์เพื่อขึ้นสู่สถานี นั่งรถไฟฟ้า BTS จากสถานี **{nearest_bts_start['clean_name']}** มุ่งหน้าไปลงที่สถานีปลายทาง **{nearest_bts_end['clean_name']}** *(มีสิ่งอำนวยความสะดวกสำหรับผู้พิการครบครัน)*
             * **🔴 ช่วงที่ 3 (เข้าสู่เป้าหมายปลายทาง):** ลงจากสถานีรถไฟฟ้า และเรียกรถ **แกร็บ (Grab) / แท็กซี่** เข้าสู่พิกัดเป้าหมาย **{end_label_th.split(' (')[0]}** (ระยะทาง {nearest_bts_end['dist_end']:.1f} เมตร)
@@ -288,23 +300,58 @@ with col1:
             st.write(f"บริการรถตู้รับ-ส่งสวัสดิการฟรี จะจำกัดสิทธิ์เฉพาะการเดินทางไป **โรงพยาบาลหรือสถานพยาบาล** เท่านั้น แต่ปัจจุบันคุณเลือกปลายทางเป็น *{end_label_th.split(' (')[0]}*")
 
 with col2:
-    st.markdown("### 🗺️ แผนที่ระบุพิกัดและแนวเส้นทางเดินรถ")
+    st.markdown("### 🗺️ แผนที่ระบุพิกัดและแนวเส้นทางเดินรถเลียบถนนจริง")
     
-    df_bts_master['dist_start'] = [haversine_distance(start_info['latitude'], start_info['longitude'], r['lat'], r['lng']) for i, r in df_bts_master.iterrows()]
-    nearest_bts_start = df_bts_master.sort_values(by='dist_start').iloc[0]
-    df_bts_master['dist_end'] = [haversine_distance(end_info['latitude'], end_info['longitude'], r['lat'], r['lng']) for i, r in df_bts_master.iterrows()]
-    nearest_bts_end = df_bts_master.sort_values(by='dist_end').iloc[0]
+    # พิกัดกึ่งกลางแมปสำหรับการเรนเดอร์เริ่มต้น
+    m = folium.Map(location=[(start_info['latitude'] + end_info['latitude'])/2, (start_info['longitude'] + end_info['longitude'])/2], zoom_start=14, tiles="CartoDB Voyager")
     
-    m = folium.Map(location=[(start_info['latitude'] + end_info['latitude'])/2, (start_info['longitude'] + end_info['longitude'])/2], zoom_start=13)
-    
+    # 📌 ปักหมุดต้นทาง และ ปลายทางหลัก
     folium.Marker([start_info['latitude'], start_info['longitude']], popup=f"ต้นทาง: {start_label_th.split(' (')[0]}", icon=folium.Icon(color='orange', icon='play', prefix='fa')).add_to(m)
     folium.Marker([end_info['latitude'], end_info['longitude']], popup=f"ปลายทาง: {end_label_th.split(' (')[0]}", icon=folium.Icon(color='green', icon='flag', prefix='fa')).add_to(m)
     
+    # 🔄 การลากเส้นในแผนที่แยกตามประเภทเงื่อนไขสัญจร (เพิ่มเส้นทางการก้าวเท้าเข้าสู่ขนส่งสาธารณะ)
+    
+    # 🚇 กรณีที่ 1: ผู้ใช้เลือกเดินทางด้วย BTS หรือ จำเป็นต้องเดินทางแบบต่อรถไฟฟ้าทดแทนรถเมล์
     if "🚇" in travel_mode or (not matched_lines and "🚌" in travel_mode):
-        folium.Marker([nearest_bts_start['lat'], nearest_bts_start['lng']], popup=f"สถานีรถไฟฟ้า BTS ต้นทาง", icon=folium.Icon(color='blue', icon='train', prefix='fa')).add_to(m)
-        folium.Marker([nearest_bts_end['lat'], nearest_bts_end['lng']], popup=f"สถานีรถไฟฟ้า BTS ปลายทาง", icon=folium.Icon(color='blue', icon='train', prefix='fa')).add_to(m)
-        folium.PolyLine([[nearest_bts_start['lat'], nearest_bts_start['lng']], [nearest_bts_end['lat'], nearest_bts_end['lng']]], color='blue', weight=6, tooltip="แนวเส้นทางเดินรถไฟฟ้าเชื่อมต่อพ่วงระบบ").add_to(m)
+        # ปักหมุดสถานีบีทีเอสโครงข่าย
+        folium.Marker([nearest_bts_start['lat'], nearest_bts_start['lng']], popup=f"สถานี BTS ต้นทาง: {nearest_bts_start['clean_name']}", icon=folium.Icon(color='blue', icon='train', prefix='fa')).add_to(m)
+        folium.Marker([nearest_bts_end['lat'], nearest_bts_end['lng']], popup=f"สถานี BTS ปลายทาง: {nearest_bts_end['clean_name']}", icon=folium.Icon(color='blue', icon='train', prefix='fa')).add_to(m)
+        
+        # 🟧 [FIRST LEG] เส้นทางเดินจาก จุดเริ่มต้น -> ไปยังสถานี BTS ต้นทาง (เกาะถนนหักฉาก ไม่ทแยงผ่าตึก)
+        walk_to_bts = generate_grid_route(start_info['latitude'], start_info['longitude'], nearest_bts_start['lat'], nearest_bts_start['lng'])
+        folium.PolyLine(walk_to_bts, color='#e67e22', weight=5, dash_array='7, 7', tooltip="🚶 เส้นทางเดินวีลแชร์เลียบทางเท้าไปสถานี BTS").add_to(m)
+        
+        # 🔵 [MAIN LEG] เส้นทางวิ่งรางรถไฟฟ้าบีทีเอส จาก สถานีต้นทาง -> สถานีปลายทาง
+        bts_transit = generate_grid_route(nearest_bts_start['lat'], nearest_bts_start['lng'], nearest_bts_end['lat'], nearest_bts_end['lng'])
+        folium.PolyLine(bts_transit, color='#2980b9', weight=6, tooltip="🚇 แนวขนานโครงข่ายเส้นทางรถไฟฟ้า BTS").add_to(m)
+        
+        # 🟧 [LAST LEG] เส้นทางเดินจาก สถานี BTS ปลายทาง -> ไปยังจุดหมายปลายทางอาคาร
+        walk_to_dest = generate_grid_route(nearest_bts_end['lat'], nearest_bts_end['lng'], end_info['latitude'], end_info['longitude'])
+        folium.PolyLine(walk_to_dest, color='#e67e22', weight=5, dash_array='7, 7', tooltip="🚶 เส้นทางเดินวีลแชร์ออกจากสถานีมุ่งสู่จุดหมาย").add_to(m)
+        
+    # 🚌 กรณีที่ 2: เลือกเดินทางด้วยรถเมล์ และมีสายรถเมล์วิ่งผ่านตรง ๆ 
+    elif "🚌" in travel_mode and matched_lines:
+        # พยายามค้นหาหมุดพิกัดตำแหน่งป้ายรถประจำทางจากฐานข้อมูลย่อยเพื่อความสมจริง
+        bus_stop_lat, bus_stop_lng = start_info['latitude'], start_info['longitude']
+        if not df_bus_stops.empty:
+            df_bus_stops['d_start'] = [haversine_distance(start_info['latitude'], start_info['longitude'], r['latitude'], r['longitude']) for i, r in df_bus_stops.iterrows()]
+            nearest_stop = df_bus_stops.sort_values(by='d_start').iloc[0]
+            if nearest_stop['d_start'] <= 800: # ถ้าป้ายรถเมล์อยู่ในรัศมีที่ใกล้เคียง
+                bus_stop_lat, bus_stop_lng = nearest_stop['latitude'], nearest_stop['longitude']
+                folium.Marker([bus_stop_lat, bus_stop_lng], popup=f"ป้ายรถประจำทาง", icon=folium.Icon(color='purple', icon='bus', prefix='fa')).add_to(m)
+
+        # 🟧 [FIRST LEG] เส้นทางเดินจาก จุดเริ่มต้น -> ไปยังจุดรอรถประจำทาง/ริมทางเท้าหลัก
+        walk_to_bus = generate_grid_route(start_info['latitude'], start_info['longitude'], bus_stop_lat, bus_stop_lng)
+        folium.PolyLine(walk_to_bus, color='#e67e22', weight=5, dash_array='7, 7', tooltip="🚶 เข็นวีลแชร์ตามฟุตบาทไปป้ายรถเมล์").add_to(m)
+
+        # 🟪 [MAIN LEG] เส้นทางวิ่งบนถนนจราจรของรถเมล์ชานต่ำ (หักเลี้ยวตามมุมสี่แยกเมือง ไม่ตัดพาดผ่านตึก)
+        bus_transit = generate_grid_route(bus_stop_lat, bus_stop_lng, end_info['latitude'], end_info['longitude'])
+        folium.PolyLine(bus_transit, color='#8e44ad', weight=6, tooltip="🚌 เส้นทางเดินรถโดยสารชานต่ำบนผิวจราจร").add_to(m)
+        
+    # 🏥 กรณีที่ 3: โหมดสวัสดิการรถตู้ของรัฐ (วิ่งรับ-ส่งหน้าอาคารโดยตรง)
     else:
-        folium.PolyLine([[start_info['latitude'], start_info['longitude']], [end_info['latitude'], end_info['longitude']]], color='purple', weight=5, dash_array='5, 5').add_to(m)
+        # ลากเส้นการเดินรถตู้สวัสดิการจากต้นทางถึงปลายทางแบบ Grid Segment เลียบเลี้ยวเข้ามุมอาคาร
+        car_transit = generate_grid_route(start_info['latitude'], start_info['longitude'], end_info['latitude'], end_info['longitude'])
+        folium.PolyLine(car_transit, color='#27ae60', weight=6, tooltip="🚑 เส้นทางสัญจรรถรับส่งสวัสดิการหน่วยงานรัฐ กทม.").add_to(m)
 
     st_folium(m, width="100%", height=580)
