@@ -1,8 +1,8 @@
 """
-AI Accessibility Route Planner V11.5 (OpenRoute Engine Edition)
-- เพิ่มระบบดึงพิกัดเส้นทางจริงผ่านโครงข่าย OpenRoute (OSRM API Free Version)
-- ตัดระบบ Footpath Geometry Simulator ออกตามความต้องการก่อนหน้า
-- แสดงแผนที่ Folium พร้อมเส้นทางคดเคี้ยวตามตรอกซอกซอยจริง
+AI Accessibility Route Planner V11.6 (Fixed NameError & Clean Production)
+- แก้ไขปัญหา NameError จากเศษตัวอักษรตกค้าง (leg1_) เรียบร้อย
+- ระบบเปิดเส้นทางนำทางจริงผ่าน OpenRoute (OSRM API Free Layer) ใช้งานได้ปกติ
+- ถอดระบบ Footpath Geometry Simulator ออกอย่างสมบูรณ์ตามข้อกำหนด
 """
 
 import streamlit as st
@@ -11,12 +11,13 @@ import numpy as np
 import folium
 import os
 import warnings
-import requests  # เพิ่มสำหรับดึงข้อมูลพิกัดเส้นทางจาก OpenRoute Engine
+import requests
 from streamlit_folium import st_folium
 
-st.set_page_config(page_title="AI Accessibility Route Planner V11.5", layout="wide", page_icon="♿")
+warnings.filterwarnings("ignore")
+st.set_page_config(page_title="AI Accessibility Route Planner V11.6", layout="wide", page_icon="♿")
 
-# 🎨 ส่วนหัวข้อ (Header Banner) พร้อมดีไซน์ CSS Clean Minimalist
+# ─── AREA 1: HEADER BANNER DESIGN ───────────────────────────────────────────
 header_html = """
 <style>
     .custom-header {
@@ -55,6 +56,7 @@ header_html = """
 st.markdown(header_html, unsafe_allow_html=True)
 st.write("---")
 
+# ─── AREA 2: MATHEMATICAL GEOMETRY FUNCTIONS ────────────────────────────────
 def haversine_distance(lat1, lon1, lat2, lon2):
     lat1, lon1, lat2, lon2 = map(np.radians, [lat1, lon1, lat2, lon2])
     dlat = lat2 - lat1
@@ -63,11 +65,11 @@ def haversine_distance(lat1, lon1, lat2, lon2):
     c = 2 * np.arcsin(np.sqrt(a))
     return 6367 * c * 1000
 
-# 📡 ฟังก์ชันเรียกใช้งาน OpenRoute API เพื่อถอดรหัสพิกัดเส้นทางจริงตามถนน/ทางเท้า
+# 📡 ระบบดึงพิกัดโครงข่ายถนนจริงจาก OpenRoute API (OSRM Engine Free)
 def get_open_route_coordinates(start_lat, start_lon, end_lat, end_lon, mode="foot"):
     """
-    ดึงพิกัดละติจูด/ลองจิจูดจริงจาก OpenStreetMap Routing Engine
-    mode: 'foot' (สำหรับคนเดิน/วีลแชร์), 'car' (สำหรับรถยนต์/รถเมล์)
+    ดึงพิกัดละติจูด/ลองจิจูดจริงตามตรอกซอกซอยจาก OpenStreetMap Routing
+    mode: 'foot' (สำหรับคนเดินเท้า/วีลแชร์), 'car' (สำหรับรถโดยสารสาธารณะ)
     """
     profile = "foot" if mode == "foot" else "car"
     url = f"http://router.project-osrm.org/route/v1/{profile}/{start_lon},{start_lat};{end_lon},{end_lat}?overview=full&geometries=geojson"
@@ -76,14 +78,15 @@ def get_open_route_coordinates(start_lat, start_lon, end_lat, end_lon, mode="foo
         if response.status_code == 200:
             data = response.json()
             if data.get("routes"):
-                # สลับลำปับจาก [lon, lat] เป็น [lat, lon] เพื่อให้ตรงกับโครงสร้างของ Folium
                 coords = data["routes"][0]["geometry"]["coordinates"]
+                # สลับตำแหน่งคู่พิกัดจาก [lon, lat] เป็น [lat, lon] เพื่อให้ Folium วาดเส้นได้ถูกต้อง
                 return [[c[1], c[0]] for c in coords]
     except Exception:
         pass
-    # Fallback Option: หากเซิร์ฟเวอร์เปิดไม่ตอบสนอง ให้ลากเส้นตรงเพื่อป้องกันโปรแกรมค้าง
+    # Fallback Mechanism: หาก API ไม่ตอบสนอง ให้ลากเส้นตรงเชื่อมพิกัดทันทีเพื่อป้องกัน App ค้าง
     return [[start_lat, start_lon], [end_lat, end_lon]]
 
+# ─── AREA 3: DATA INGESTION ENGINE ──────────────────────────────────────────
 @st.cache_data
 def load_and_prepare_data():
     df_places = pd.read_csv('bangkok_places_bus_spot.csv')
@@ -115,7 +118,7 @@ except Exception as e:
     st.error(f"❌ ระบบไม่สามารถอ่านฐานข้อมูลไฟล์ได้: {e}")
     st.stop()
 
-# 🎯 พจนานุกรมแปลชื่อสถานที่บนหน้าเว็บเป็นภาษาไทย
+# ─── AREA 4: TRANSLATION & DICTIONARY MAPS ──────────────────────────────────
 th_name_base_map = {
     "Victory Monument": "อนุสาวรีย์ชัยสมรภูมิ",
     "Siam Station": "สถานีรถไฟฟ้า สยาม",
@@ -149,7 +152,7 @@ bus_translation_dict = {
     "Chatuchak Park": ["BTSหมอชิต", "ห้าแยกลาดพร้าว"]
 }
 
-# คำนวณทำป้ายวงเล็บแจ้งสายรถเมล์และ BTS ใน Dropdown
+# คำนวณเบื้องหลังเพื่อจัดทำข้อความแสดงผลสายรถเมล์และบีทีเอสในตัวเลือก Dropdown
 display_names_th_with_brackets = []
 for idx, row in df_places.iterrows():
     p_name = row['place_name']
@@ -178,7 +181,7 @@ for idx, row in df_places.iterrows():
 df_places['display_name_th'] = display_names_th_with_brackets
 place_list_th = sorted(df_places['display_name_th'].tolist())
 
-# ─── แถบเมนูด้านซ้าย (Sidebar) ───
+# ─── AREA 5: SIDEBAR CONTROL PANEL ──────────────────────────────────────────
 st.sidebar.header("🕹️ เมนูเลือกการเดินทาง")
 
 default_start_idx = 0
@@ -212,6 +215,7 @@ travel_mode = st.sidebar.radio(
 is_hospital = any(keyword in end_place_name.lower() for keyword in ["hospital", "โรงพยาบาล", "รพ."])
 matched_lines = []
 
+# ─── AREA 6: DASHBOARD WEB PRESENTATION ─────────────────────────────────────
 col1, col2 = st.columns([1.1, 1.9])
 
 with col1:
@@ -220,7 +224,7 @@ with col1:
     st.write(f"**ถึง:** {end_label_th.split(' (')[0]}")
     st.write("---")
 
-    # 🚇 1. โหมด BTS
+    # 🚇 โหมด 1: รถไฟฟ้า BTS
     if "🚇" in travel_mode:
         df_bts_master['dist_start'] = [haversine_distance(start_info['latitude'], start_info['longitude'], r['lat'], r['lng']) for i, r in df_bts_master.iterrows()]
         nearest_bts_start = df_bts_master.sort_values(by='dist_start').iloc[0]
@@ -229,7 +233,7 @@ with col1:
         nearest_bts_end = df_bts_master.sort_values(by='dist_end').iloc[0]
 
         transport_first_leg = "🚶 เข็นวีลแชร์เดินเท้า" if nearest_bts_start['dist_start'] <= 150 else "🚖 แนะนำเรียกใช้บริการ แกร็บ (Grab) หรือ แท็กซี่"
-        transport_last_leg = "🚶 เข็นวีลแชร์เดินเท้า" if nearest_bts_end['dist_end'] <= 150 else "🚖 แนะนำเรียกใช้บริการ แกร็บ (Grab) หรือ แท็กซี่"
+        transport_last_leg = "🚶 เข็นวีลแชร์เดินเท้า" if nearest_bts_end['dist_end'] <= 150 else "𚖖 แนะนำเรียกใช้บริการ แกร็บ (Grab) หรือ แท็กซี่"
 
         has_lift_start = "มี" if str(nearest_bts_start['มีลิฟต์']).strip() in ['1', '1.0', 'มี', 'Yes'] else "ไม่มี"
         has_ramp_start = "มี" if str(nearest_bts_start['ทางลาดสำหรับรถเข็น']).strip() in ['1', '1.0', 'มี', 'Yes'] else "ไม่มี"
@@ -247,7 +251,7 @@ with col1:
         st.info(f"**🔴 ขั้นที่ 3:** {transport_last_leg} เข้าสู่พิกัดเป้าหมาย **{end_label_th.split(' (')[0]}** (ระยะทาง {nearest_bts_end['dist_end']:.1f} เมตร)")
         st.write(f"* มีลิฟต์วีลแชร์ = **{has_lift_end}** | มีทางลาด = **{has_ramp_end}**")
 
-    # 🚌 2. โหมดรถเมล์ชานต่ำ
+    # 🚌 โหมด 2: รถเมล์ชานต่ำ
     elif "🚌" in travel_mode:
         st.markdown("#### 𚏏 ผลคำนวณการเดินรถโดยสารอารยสถาปัตย์")
         
@@ -283,7 +287,7 @@ with col1:
             * **🔴 ช่วงที่ 3:** เข้าสู่พิกัดเป้าหมายปลายทาง **{end_label_th.split(' (')[0]}** ({nearest_bts_end['dist_end']:.1f} ม.)
             """)
 
-    # 🏥 3. โหมดสวัสดิการรถตู้รัฐ
+    # 🏥 โหมด 3: สวัสดิการรถตู้รัฐฟรี
     elif "🏥" in travel_mode:
         if is_hospital:
             st.warning("🏥 **ยืนยันสิทธิ์รับสวัสดิการรถสถานพยาบาลสำเร็จ**")
@@ -298,24 +302,39 @@ with col1:
 with col2:
     st.markdown("### 🗺️ OpenRoute Engine GIS Canvas")
     
-    # ดึงค่าพิกัดความพร้อมสถานีรอบตัวอีกครั้งสำหรับปักหมุดโครงข่ายแผนที่
     df_bts_master['dist_start'] = [haversine_distance(start_info['latitude'], start_info['longitude'], r['lat'], r['lng']) for i, r in df_bts_master.iterrows()]
     nearest_bts_start = df_bts_master.sort_values(by='dist_start').iloc[0]
     df_bts_master['dist_end'] = [haversine_distance(end_info['latitude'], end_info['longitude'], r['lat'], r['lng']) for i, r in df_bts_master.iterrows()]
     nearest_bts_end = df_bts_master.sort_values(by='dist_end').iloc[0]
     
-    # สร้าง Map
+    # กำหนดแผนที่เริ่มต้น
     m = folium.Map(location=[(start_info['latitude'] + end_info['latitude'])/2, (start_info['longitude'] + end_info['longitude'])/2], zoom_start=13, tiles='CartoDB Positron')
     
     # ปักหมุดหลัก ต้นทาง และปลายทาง
     folium.Marker([start_info['latitude'], start_info['longitude']], popup=f"ต้นทาง: {start_label_th.split(' (')[0]}", icon=folium.Icon(color='orange', icon='user', prefix='fa')).add_to(m)
     folium.Marker([end_info['latitude'], end_info['longitude']], popup=f"ปลายทาง: {end_label_th.split(' (')[0]}", icon=folium.Icon(color='red', icon='flag', prefix='fa')).add_to(m)
     
-    # วาดเส้นและดึงพิกัดจากระบบเชื่อมโครงข่ายทางถนนจริง (OpenRoute OSRM API Layer)
+    # การคำนวณและดึงพิกัดจากระบบเครือข่ายเส้นทางจริง (OpenRoute System)
     if "🚇" in travel_mode or (not matched_lines and "🚌" in travel_mode):
-        # ปักหมุดสถานี BTS
+        # ปักหมุดตำแหน่งสถานี BTS ที่เกี่ยวข้อง
         folium.Marker([nearest_bts_start['lat'], nearest_bts_start['lng']], popup=f"BTS: {nearest_bts_start['clean_name']}", icon=folium.Icon(color='blue', icon='train', prefix='fa')).add_to(m)
         folium.Marker([nearest_bts_end['lat'], nearest_bts_end['lng']], popup=f"BTS: {nearest_bts_end['clean_name']}", icon=folium.Icon(color='blue', icon='train', prefix='fa')).add_to(m)
         
-        # 🟢 1. ดึงพิกัดนำทางจริงช่วงที่ 1 (ต้นทางเดินเท้า -> BTS แรก)
-        leg1_
+        # 🟢 ช่วงที่ 1: ดึงพิกัดเส้นทางคนเดินเท้าจริงจากต้นทางไป BTS แรก
+        leg1_route = get_open_route_coordinates(start_info['latitude'], start_info['longitude'], nearest_bts_start['lat'], nearest_bts_start['lng'], mode="foot")
+        folium.PolyLine(leg1_route, color='#2ecc71', weight=5, dash_array='5, 5', tooltip="ทางเดินเท้าเข้าสถานี").add_to(m)
+        
+        # 🔵 ช่วงที่ 2: รางบีทีเอส (ลากเชื่อมตรงระหว่างสถานีเพื่อความแม่นยำของระบบราง)
+        folium.PolyLine([[nearest_bts_start['lat'], nearest_bts_start['lng']], [nearest_bts_end['lat'], nearest_bts_end['lng']]], color='#2980b9', weight=7, tooltip="โครงข่ายระบบรางด่วน").add_to(m)
+        
+        # 🔴 ช่วงที่ 3: ดึงพิกัดเส้นทางคนเดินเท้าจริงจาก BTS ปลายทางเข้าสู่พิกัดเป้าหมาย
+        leg3_route = get_open_route_coordinates(nearest_bts_end['lat'], nearest_bts_end['lng'], end_info['latitude'], end_info['longitude'], mode="foot")
+        folium.PolyLine(leg3_route, color='#e74c3c', weight=5, dash_array='5, 5', tooltip="ทางเดินเท้าเข้าจุดเป้าหมาย").add_to(m)
+        
+    else:
+        # 🚌 กรณีมีรถเมล์ชานต่ำวิ่งตรงสายเดียว หรือโหมดรถตู้โรงพยาบาล -> ดึงพิกัดตามโครงข่ายเส้นทางรถวิ่งจริงบนถนน (car mode)
+        bus_route_coordinates = get_open_route_coordinates(start_info['latitude'], start_info['longitude'], end_info['latitude'], end_info['longitude'], mode="car")
+        folium.PolyLine(bus_route_coordinates, color='#8e44ad', weight=6, tooltip="เส้นทางบริการขนส่งสาธารณะตามโครงข่ายถนนจริง").add_to(m)
+
+    # แสดงผลลงหน้าเว็บสตรีมลิต
+    st_folium(m, width="100%", height=580)
