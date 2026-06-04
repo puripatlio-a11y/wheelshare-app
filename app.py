@@ -75,7 +75,6 @@ def load_and_precompute():
     df_stations  = pd.read_csv(f"{base}/bts_station.csv")
     df_acc       = pd.read_csv(f"{base}/BTS_for_wheelchair_users_spreadsheet_-_BTS_green_line.csv")
     df_bus_stops = pd.read_csv(f"{base}/bangkok_bus_stops_coordinates.csv")
-    df_passenger = pd.read_csv(f"{base}/bangkok_transit_passenger_data__1_.csv")
     df_rf        = pd.read_csv(f"{base}/wheelchair_random_forest_300rows.csv")
 
     df_stations['clean_name'] = df_stations['name'].str.replace('สถานี','').str.strip()
