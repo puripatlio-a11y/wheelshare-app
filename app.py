@@ -51,7 +51,7 @@ st.markdown(header_html, unsafe_allow_html=True)
 st.write("---")
 
 # ─── ORS Client (Real Road Routing) ──────────────────────────────────────────
-ORS_API_KEY = "eyJvcmciOiI1YjNjZTM1OTc4NTExMTAwMDFjZjYyNDgiLCJpZCI6IjM4ZTc2MTM5NzUyZjQ1ZjJhOTJjYTlhOTEwMzg5NmZlIiwiaCI6Im11cm11cjY0In0="
+ORS_API_KEY = "PUT_YOUR_OPENROUTESERVICE_API_KEY_HERE"
 ors_available = False
 try:
     import openrouteservice
