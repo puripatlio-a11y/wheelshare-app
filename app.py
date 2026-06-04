@@ -1,6 +1,6 @@
 """
-AI Accessibility Route Planner — Version 9.0 (AI-Focus & Hardcore Tested)
-ปรับปรุงตามคำแนะนำอาจารย์: เน้นทางเท้าคนเดิน (Pedestrians), ระบุฟังก์ชัน AI ชัดเจน, และเพิ่มระบบ Error Test (The harder, the better)
+AI Accessibility Route Planner — Version 9.1 (Bug Fix - Path Resolution)
+แก้ปัญหา FileNotFoundError บน Streamlit Cloud โดยใช้ Dynamic Data Path Fallback System
 """
 
 import streamlit as st
@@ -30,7 +30,7 @@ st.markdown("""
 .ai-badge { background:#e74c3c; color:white; padding:6px 16px; border-radius:20px; font-size:0.9rem; font-weight:bold; display:inline-block; margin-top:8px; }
 </style>
 <div class="custom-header">
-  <h1>♿ AI Pedestrian Accessibility Route Planner (V9.0)</h1>
+  <h1>♿ AI Pedestrian Accessibility Route Planner (V9.1)</h1>
   <h3>ระบบวิเคราะห์เส้นทางฟุตบาทคนเดินด้วยปัญญาประดิษฐ์ (Focus in AI & Error Testing)</h3>
   <span class="ai-badge">🔬 Hardcore Error Testing Model Enabled</span>
 </div>
@@ -60,7 +60,14 @@ def haversine_vec(lat1, lon1, lat2_arr, lon2_arr):
 # ─── LOAD & PRECOMPUTE DATA ──────────────────────────────────────────────────
 @st.cache_data
 def load_and_precompute():
-    base = "/mnt/user-data/uploads"
+    # 🔍 ระบบตรวจจับตำแหน่งไฟล์อัตโนมัติ (Dynamic Path Resolution) เพื่อป้องกัน FileNotFoundError
+    if os.path.exists("bangkok_places_bus_spot.csv"):
+        base = "."
+    elif os.path.exists("data/bangkok_places_bus_spot.csv"):
+        base = "./data"
+    else:
+        base = "/mnt/user-data/uploads"  # โฟลเดอร์สำรองกรณีรันในสภาพแวดล้อมเก่า
+
     df_places    = pd.read_csv(f"{base}/bangkok_places_bus_spot.csv")
     df_stations  = pd.read_csv(f"{base}/bts_station.csv")
     df_acc       = pd.read_csv(f"{base}/BTS_for_wheelchair_users_spreadsheet_-_BTS_green_line.csv")
@@ -110,7 +117,6 @@ def load_and_precompute():
 # ─── TRAINING THE AI FUNCTIONS ───────────────────────────────────────────────
 @st.cache_resource
 def train_ai_cores(df_rf):
-    # AI Function 1: Route Optimization Engine (Random Forest)
     le = LabelEncoder()
     df = df_rf.copy()
     df['Transport_Type_enc'] = le.fit_transform(df['Transport_Type'])
@@ -118,14 +124,12 @@ def train_ai_cores(df_rf):
     clf1 = RandomForestClassifier(n_estimators=100, random_state=42, max_depth=6)
     clf1.fit(df[feats], df['Recommended'])
 
-    # AI Function 2: Pedestrian Footpath Safety Predictor
-    # Feature map: [Width (m), Surface Roughness (0=Bad, 1=Good), Obstacle Count, Incline/Ramp Presence (0=No, 1=Yes)]
     X2 = np.array([
         [1.5,1,0,1],[0.7,0,3,0],[1.2,1,1,1],[1.8,1,0,1],[0.8,0,4,0],
         [2.0,1,0,1],[0.5,0,6,0],[1.4,1,1,1],[0.9,0,3,0],[2.5,1,0,1],
         [0.6,0,5,0],[1.6,1,1,1],[1.1,1,0,1],[0.4,0,7,0],[2.1,1,2,1],
     ])
-    y2 = np.array([1,0,1,1,0,1,0,1,0,1,0,1,1,0,1]) # 1 = Safe/Passable, 0 = Blocked/Dangerous
+    y2 = np.array([1,0,1,1,0,1,0,1,0,1,0,1,1,0,1])
     clf2 = RandomForestClassifier(n_estimators=50, random_state=42)
     clf2.fit(X2, y2)
     return clf1, clf2, le, feats
@@ -166,7 +170,6 @@ sw_surface = st.sidebar.selectbox("Surface Texture:", ["Smooth Concrete (Good Su
 sw_obstacles = st.sidebar.slider("Simulated Physical Obstacles (Poles/Stalls)", 0, 15, 2)
 sw_ramp = st.sidebar.checkbox("Curb Ramp Presence", value=True)
 
-# ─── 🔥 THE HARDER, THE BETTER: ERROR TESTING SUITE ──────────────────────────
 st.sidebar.markdown("---")
 st.sidebar.markdown("### 🧪 Hardcore Error Testing Suite")
 st.sidebar.caption("ป้อนความผิดพลาดและอุปสรรคขั้นรุนแรงเพื่อทดสอบความเสถียรของ AI")
@@ -180,7 +183,6 @@ e_row = df_places[df_places['display_th'] == end_p].iloc[0]
 slat, slon = s_row['latitude'], s_row['longitude']
 elat, elon = e_row['latitude'], e_row['longitude']
 
-# Vectorized nearest lookups
 d_s = haversine_vec(slat, slon, bts_lats, bts_lons)
 bts_s = df_bts.iloc[int(np.argmin(d_s))]
 dist_bts_s = float(np.min(d_s))
@@ -189,7 +191,6 @@ d_e = haversine_vec(elat, elon, bts_lats, bts_lons)
 bts_e = df_bts.iloc[int(np.argmin(d_e))]
 dist_bts_e = float(np.min(d_e))
 
-# AI Input Logic Formulation
 has_lift_s = "0" if err_elevator_break else str(bts_s.get('มีลิฟต์',''))
 has_lift_e = "0" if err_elevator_break else str(bts_e.get('มีลิฟต์',''))
 
@@ -205,27 +206,23 @@ base_dist = float(haversine_vec(slat, slon, np.array([elat]), np.array([elon]))[
 est_cost = int(20 + (base_dist / 1000) * 3)
 est_time = int((base_dist / 1000) * 5)
 
-# Adjust inputs based on Error Testing conditions
 safety_score = 4 if prefer_safe else 3
 if err_extreme_weather:
     safety_score -= 2
-    sw_obstacles += 5  # Water puddles act as hidden obstacles
+    sw_obstacles += 5
 
 # ─── EXECUTE AI MODEL EVALUATIONS ───────────────────────────────────────────
-# Run Function 1
 r_label, r_prob, r_imp = ai_predict_route_safety("BTS", el_val, rmp_val, acc_exit, est_cost, est_time, 0, safety_score, avg_crowd, urgency_val, 1 if prefer_safe else 0, 1 if prefer_cheap else 0)
 
-# Run Function 2
 surf_binary = 1 if "Smooth" in sw_surface else 0
 ramp_binary = 1 if sw_ramp else 0
-if err_extreme_weather: surf_binary = 0  # Forced slippery texture
+if err_extreme_weather: surf_binary = 0
 
 sw_label, sw_prob = ai_predict_footpath_viability(sw_width, surf_binary, sw_obstacles, ramp_binary)
 
 # ─── CORE LAYOUT: THREE GRAPHICAL COLUMNS ─────────────────────────────────────
 col_metrics, col_slates, col_canvas = st.columns([1, 1.1, 1.8])
 
-# 🛠️ COLUMN 1: AI FOCUS SPECIFICATION & PAIN POINT ANALYSIS
 with col_metrics:
     st.markdown("### 🧠 AI Core Architecture")
     st.caption("เจาะลึกฟังก์ชันและการประมวลผลของโมเดลปัญญาประดิษฐ์")
@@ -255,12 +252,10 @@ with col_metrics:
     imp_df['Feature'] = imp_df['Feature'].map(factor_thai).fillna(imp_df['Feature'])
     st.bar_chart(imp_df.set_index('Feature'), height=150)
 
-# 🧪 COLUMN 2: ERROR TESTING ANALYSIS & REAL-TIME REPORT
 with col_slates:
     st.markdown("### 🧪 Hardcore Error Testing Report")
     st.caption("ประเมินเสถียรภาพการตัดสินใจของ AI ภายใต้สภาวะวิกฤต (Strict Stress Testing)")
     
-    # Structural Error Evaluations
     st.markdown("⚡ **สภาวะแวดล้อมจำลอง ณ ปัจจุบัน:**")
     metric_weather = "🌧️ เกิดอุทกภัย/ฝนตกหนัก" if err_extreme_weather else "☀️ ทัศนวิสัยปกติ"
     metric_lift = "🚨 ลิฟต์สถานีชำรุด (Breakdown)" if err_elevator_break else "✅ ลิฟต์พร้อมใช้งาน"
@@ -271,9 +266,9 @@ with col_slates:
     st.write(f"- อัตราความหนาแน่น: `{metric_crowd}`")
     
     st.markdown("---")
+    st.markdown("---")
     st.markdown("🔎 **ผลลัพธ์การทดสอบระบบ (Expected vs Actual):**")
     
-    # Logical check for error handling
     if err_elevator_break or err_extreme_weather or sw_width < 0.8:
         st.info("🎯 **Is Result Expected?: Yes**")
         st.caption("โมเดล AI แสดงความฉลาดโดยการปรับลดคะแนนความเชื่อมั่นลงโดยอัตโนมัติเมื่อเจอปัจจัยลบเชิงซ้อน (ระบบไม่ทำงานผิดพลาดแม้ค่าพิกัดวิกฤต)")
@@ -289,36 +284,28 @@ with col_slates:
     st.write(f"2. เข้าสู่จุดเปลี่ยนผ่านอารยสถาปัตย์ ณ **{bts_s['clean_name']}**")
     st.write(f"3. สัญจรผ่านจุดเชื่อมต่อทางแยกคนเดินเท้า ไปยังปลายทาง **{bts_e['clean_name']}**")
 
-# 🗺️ COLUMN 3: PEDESTRIAN MARKER VISUALIZATION (NO HIGHWAY LINES)
 with col_canvas:
     st.markdown("### 🚶 Pedestrian Walkway Map Canvas")
     st.markdown("<small>แสดงเฉพาะโครงข่าย **ฟุตบาทคนเดินและจุดเชื่อมต่อทางเท้า** เท่านั้น (ตัดถนนรถยนต์ออกตามคำสั่ง)</small>", unsafe_allow_html=True)
     
-    # Center map based on selected nodes
     m = folium.Map(location=[(slat+elat)/2, (slon+elon)/2], zoom_start=14, tiles='CartoDB Positron')
     
-    # Layer Definitions
     fg_pedestrian_path = folium.FeatureGroup(name="🚶 Dedicated Footpath (เส้นทางเดินเท้า)", show=True)
     fg_hazard_nodes = folium.FeatureGroup(name="⚠️ AI Detected Obstacles (สิ่งกีดขวาง)", show=True)
     fg_station_hubs = folium.FeatureGroup(name="♿ Accessibility Hubs (จุดเชื่อมต่ออารยสถาปัตย์)", show=True)
     
-    # Plot Origin & Destination Nodes
     folium.Marker([slat, slon], tooltip=f"Origin: {start_p}", icon=folium.Icon(color='green', icon='user', prefix='fa')).add_to(m)
     folium.Marker([elat, elon], tooltip=f"Destination: {end_p}", icon=folium.Icon(color='red', icon='flag', prefix='fa')).add_to(m)
     
-    # Render ONLY pedestrian walkway paths (using dashed overlay representation)
     path_color = "#2ecc71" if (r_label == 1 and sw_label == 1) else "#e74c3c"
     
-    # Simulate a dedicated pedestrian grid line mapping
     folium.PolyLine([[slat, slon], [bts_s['lat'], bts_s['lng']]], color=path_color, weight=5, dash_array='7,7', tooltip="ฟุตบาทเชื่อมต่อช่วงต้น").add_to(fg_pedestrian_path)
     folium.PolyLine([[bts_s['lat'], bts_s['lng']], [bts_e['lat'], bts_e['lng']]], color="#3498db", weight=8, tooltip="ทางยกระดับ/โครงข่ายขนส่งมวลชนเพื่อคนพิการ").add_to(fg_pedestrian_path)
     folium.PolyLine([[bts_e['lat'], bts_e['lng']], [elat, elon]], color=path_color, weight=5, dash_array='7,7', tooltip="ฟุตบาทเชื่อมต่อช่วงปลาย").add_to(fg_pedestrian_path)
     
-    # Mark Nodes on the Map
     folium.Marker([bts_s['lat'], bts_s['lng']], tooltip=f"Hub: {bts_s['clean_name']}", icon=folium.Icon(color='blue', icon='circle', prefix='fa')).add_to(fg_station_hubs)
     folium.Marker([bts_e['lat'], bts_e['lng']], tooltip=f"Hub: {bts_e['clean_name']}", icon=folium.Icon(color='blue', icon='circle', prefix='fa')).add_to(fg_station_hubs)
     
-    # Simulate Obstacles Dynamically onto the Footpath Network
     if sw_obstacles > 0:
         np.random.seed(42)
         for i in range(min(sw_obstacles, 6)):
@@ -331,7 +318,6 @@ with col_canvas:
                 icon=folium.Icon(color='orange', icon='warning', prefix='fa')
             ).add_to(fg_hazard_nodes)
 
-    # Bind FeatureGroups to Map Canvas
     fg_pedestrian_path.add_to(m)
     fg_hazard_nodes.add_to(m)
     fg_station_hubs.add_to(m)
@@ -339,8 +325,7 @@ with col_canvas:
     folium.LayerControl(position='topright').add_to(m)
     MiniMap(toggle_display=True, position='bottomright').add_to(m)
     
-    # Output Map Graphic Object
     st_folium(m, width="100%", height=520)
 
 st.markdown("---")
-st.caption("📐 AI Accessibility Route Planner v9.0 | Focus Mode: Pedestrians Only | Strict Test Criteria Activated")
+st.caption("📐 AI Accessibility Route Planner v9.1 | Focus Mode: Pedestrians Only | Strict Test Criteria Activated")
