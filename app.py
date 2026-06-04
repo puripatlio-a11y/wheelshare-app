@@ -1,222 +1,321 @@
 """
-AI Pedestrian Accessibility Route Planner — Version 11.0 (Clean Minimalist)
-- ตัดแผนที่และการแสดงผลเชิงภูมิศาสตร์ออกทั้งหมดตามสั่ง
-- ตัดระบบ Footpath Geometry Simulator ออกอย่างเด็ดขาด
-- มุ่งเน้นการวิเคราะห์เส้นทางคนเดินเท้าล้วน และรายงานผลการทดสอบสภาวะวิกฤต (Stress Test Analytics)
+AI Accessibility Route Planner V11.5 (OpenRoute Engine Edition)
+- เพิ่มระบบดึงพิกัดเส้นทางจริงผ่านโครงข่าย OpenRoute (OSRM API Free Version)
+- ตัดระบบ Footpath Geometry Simulator ออกตามความต้องการก่อนหน้า
+- แสดงแผนที่ Folium พร้อมเส้นทางคดเคี้ยวตามตรอกซอกซอยจริง
 """
 
 import streamlit as st
 import pandas as pd
 import numpy as np
+import folium
 import os
 import warnings
-from sklearn.ensemble import RandomForestClassifier
-from sklearn.preprocessing import LabelEncoder
+import requests  # เพิ่มสำหรับดึงข้อมูลพิกัดเส้นทางจาก OpenRoute Engine
+from streamlit_folium import st_folium
 
-warnings.filterwarnings("ignore")
-st.set_page_config(page_title="AI Accessibility Planner V11", layout="wide", page_icon="♿")
+st.set_page_config(page_title="AI Accessibility Route Planner V11.5", layout="wide", page_icon="♿")
 
-# ─── HEADER DESIGN ───────────────────────────────────────────────────────────
-st.markdown("""
+# 🎨 ส่วนหัวข้อ (Header Banner) พร้อมดีไซน์ CSS Clean Minimalist
+header_html = """
 <style>
-.custom-header {
-    background-image: linear-gradient(rgba(0,0,0,0.6), rgba(0,0,0,0.8)),
-        url("https://img.freepik.com/free-photo/full-shot-happy-friends-chatting-outside_23-2149391993.jpg?semt=ais_hybrid&w=740&q=80");
-    background-size:cover; background-position:center;
-    padding:35px; border-radius:12px; color:white; text-align:center; margin-bottom:20px;
-}
-.custom-header h1 { color:#fff !important; font-size:2.2rem !important; text-shadow:2px 2px 8px rgba(0,0,0,0.8); }
-.ai-badge { background:#e74c3c; color:white; padding:6px 16px; border-radius:20px; font-size:0.9rem; font-weight:bold; display:inline-block; margin-top:8px; }
+    .custom-header {
+        background-image: linear-gradient(rgba(0, 0, 0, 0.4), rgba(0, 0, 0, 0.55)), 
+                          url("https://img.freepik.com/free-photo/full-shot-happy-friends-chatting-outside_23-2149391993.jpg?semt=ais_hybrid&w=740&q=80");
+        background-size: cover;
+        background-position: center;
+        padding: 40px;
+        border-radius: 12px;
+        color: white;
+        text-align: center;
+        margin-bottom: 25px;
+        box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+    }
+    .custom-header h1 {
+        color: #ffffff !important;
+        font-family: 'Helvetica Neue', Arial, sans-serif;
+        font-weight: 700;
+        font-size: 2.5rem !important;
+        text-shadow: 2px 2px 8px rgba(0,0,0,0.7);
+        margin-bottom: 5px;
+    }
+    .custom-header h3 {
+        color: #f0f2f6 !important;
+        font-size: 1.3rem !important;
+        font-weight: 400;
+        text-shadow: 1px 1px 5px rgba(0,0,0,0.7);
+    }
 </style>
+
 <div class="custom-header">
-  <h1>♿ AI Pedestrian Accessibility Route Planner (V11.0)</h1>
-  <h3>ระบบวิเคราะห์โครงข่ายทางเท้าคนเดินด้วย AI และชุดทดสอบสภาวะบีบคั้นเชิงตัวเลข</h3>
-  <span class="ai-badge">🔬 Pure Pedestrian Data Model & Stress Test Only</span>
+    <h1>♿ AI Accessibility Route Planner for Wheelchair Users</h1>
+    <h3>ระบบส่งเสริมการวางแผนการเดินทางด้วยปัญญาประดิษฐ์ระบบเปิดเส้นทางเชื่อมต่อจริง</h3>
 </div>
-""", unsafe_allow_html=True)
+"""
+st.markdown(header_html, unsafe_allow_html=True)
+st.write("---")
 
-# ─── VECTORIZED PEDESTRIAN GEOMETRY ──────────────────────────────────────────
-def haversine_vec(lat1, lon1, lat2_arr, lon2_arr):
-    R = 6371000.0  # รัศมีโลกเป็นเมตร (ความละเอียดระดับเส้นทางเดินเท้า)
-    la1, lo1 = np.radians(lat1), np.radians(lon1)
-    la2 = np.radians(lat2_arr)
-    lo2 = np.radians(lon2_arr)
-    dlat = la2 - la1
-    dlon = lo2 - lo1
-    a = np.sin(dlat/2)**2 + np.cos(la1)*np.cos(la2)*np.sin(dlon/2)**2
-    return R * 2 * np.arcsin(np.sqrt(a))
+def haversine_distance(lat1, lon1, lat2, lon2):
+    lat1, lon1, lat2, lon2 = map(np.radians, [lat1, lon1, lat2, lon2])
+    dlat = lat2 - lat1
+    dlon = lon2 - lon1
+    a = np.sin(dlat/2.0)**2 + np.cos(lat1) * np.cos(lat2) * np.sin(dlon/2.0)**2
+    c = 2 * np.arcsin(np.sqrt(a))
+    return 6367 * c * 1000
 
-# ─── LOAD DATA WITH SMART KEYWORD SEARCH ─────────────────────────────────────
-@st.cache_data
-def load_and_precompute_v11():
-    def smart_load_csv(keywords, default_name):
-        search_dirs = [".", "data", "Data", "/mnt/user-data/uploads"]
-        for d in search_dirs:
-            path = os.path.join(d, default_name)
-            if os.path.exists(path):
-                return pd.read_csv(path)
-        for d in search_dirs:
-            if os.path.exists(d):
-                for root, dirs, files in os.walk(d):
-                    for f in files:
-                        if f.endswith('.csv'):
-                            for kw in keywords:
-                                if kw.lower() in f.lower():
-                                    return pd.read_csv(os.path.join(root, f))
-        raise FileNotFoundError(f"Missing file matching {keywords} (Expected: {default_name})")
-
+# 📡 ฟังก์ชันเรียกใช้งาน OpenRoute API เพื่อถอดรหัสพิกัดเส้นทางจริงตามถนน/ทางเท้า
+def get_open_route_coordinates(start_lat, start_lon, end_lat, end_lon, mode="foot"):
+    """
+    ดึงพิกัดละติจูด/ลองจิจูดจริงจาก OpenStreetMap Routing Engine
+    mode: 'foot' (สำหรับคนเดิน/วีลแชร์), 'car' (สำหรับรถยนต์/รถเมล์)
+    """
+    profile = "foot" if mode == "foot" else "car"
+    url = f"http://router.project-osrm.org/route/v1/{profile}/{start_lon},{start_lat};{end_lon},{end_lat}?overview=full&geometries=geojson"
     try:
-        df_places    = smart_load_csv(["places_bus_spot", "places"], "bangkok_places_bus_spot.csv")
-        df_stations  = smart_load_csv(["bts_station", "station"], "bts_station.csv")
-        df_acc       = smart_load_csv(["green", "wheelchair", "spreadsheet"], "BTS for wheelchair users spreadsheet - BTS green line.csv")
-        df_bus_stops = smart_load_csv(["bus_stops", "coordinates"], "bangkok_bus_stops_coordinates.csv")
-        df_smalie    = smart_load_csv(["smalie", "smile", "sheet1"], "ThaiSmalieBus - Sheet1.csv")
-        df_rf        = smart_load_csv(["random_forest", "300rows"], "wheelchair_random_forest_300rows.csv")
-    except Exception as e:
-        st.error("❌ ไม่พบไฟล์ข้อมูลสำคัญบางไฟล์ในระบบ GitHub Repository")
-        st.stop()
+        response = requests.get(url, timeout=5)
+        if response.status_code == 200:
+            data = response.json()
+            if data.get("routes"):
+                # สลับลำปับจาก [lon, lat] เป็น [lat, lon] เพื่อให้ตรงกับโครงสร้างของ Folium
+                coords = data["routes"][0]["geometry"]["coordinates"]
+                return [[c[1], c[0]] for c in coords]
+    except Exception:
+        pass
+    # Fallback Option: หากเซิร์ฟเวอร์เปิดไม่ตอบสนอง ให้ลากเส้นตรงเพื่อป้องกันโปรแกรมค้าง
+    return [[start_lat, start_lon], [end_lat, end_lon]]
 
-    df_stations['clean_name'] = df_stations['name'].str.replace('สถานี','').str.strip()
-    df_acc['clean_name']      = df_acc['สถานี'].str.replace('สถานี','').str.strip()
-
-    df_bts = pd.merge(df_acc, df_stations[['clean_name','lat','lng','btsline','location']], on='clean_name', how='inner').drop_duplicates(subset=['clean_name']).reset_index(drop=True)
-
-    bts_lats, bts_lons = df_bts['lat'].values, df_bts['lng'].values
-    bus_lats, bus_lons = df_bus_stops['latitude'].values, df_bus_stops['longitude'].values
-
-    display_names, nearest_bts_idx, nearest_bus_dist = [], [], []
-    for _, row in df_places.iterrows():
-        lat, lon = row['latitude'], row['longitude']
-        d_bts = haversine_vec(lat, lon, bts_lats, bts_lons)
-        nearest_bts_idx.append(int(np.argmin(d_bts)))
-        d_bus = haversine_vec(lat, lon, bus_lats, bus_lons)
-        nearest_bus_dist.append(float(np.min(d_bus)))
-        display_names.append(row['place_name'])
-
-    df_places['display_th'] = display_names
-    df_places['_bts_idx'] = nearest_bts_idx
-    df_places['_min_bus_dist'] = nearest_bus_dist
-
-    crowd_map = {stn: np.random.choice([1, 2, 3]) for stn in df_bts['clean_name']}
-    return df_places, df_bts, df_bus_stops, df_smalie, df_rf, bts_lats, bts_lons, bus_lats, bus_lons, crowd_map
-
-df_places, df_bts, df_bus_stops, df_smalie, df_rf, bts_lats, bts_lons, bus_lats, bus_lons, crowd_map = load_and_precompute_v11()
-
-# ─── AI MODELS TRAINING ──────────────────────────────────────────────────────
-@st.cache_resource
-def train_ai_cores_v11(df_rf):
-    le = LabelEncoder()
-    df = df_rf.copy()
-    df['Transport_Type_enc'] = le.fit_transform(df['Transport_Type'])
-    feats = ['Elevator','Ramp','Accessible_Exit','Cost','Travel_Time','BusSupport','Safety','Crowded_Level','Urgency','Prefer_Safe','Prefer_Cheap','Transport_Type_enc']
-    clf1 = RandomForestClassifier(n_estimators=150, random_state=42, max_depth=8)
-    clf1.fit(df[feats], df['Recommended'])
-    return clf1, le, feats
-
-route_rf, le_transport, rf_features = train_ai_cores_v11(df_rf)
-
-# ─── SIDEBAR CONTROL PAD ──────────────────────────────────────────────────────
-st.sidebar.header("🕹️ AI Route Control Panel")
-place_list = sorted(df_places['display_th'].tolist())
-start_p = st.sidebar.selectbox("📍 Origin Node (จุดเริ่มต้นเท้า):", place_list, index=0)
-end_p = st.sidebar.selectbox("🏁 Destination Node (จุดปลายทางเท้า):", place_list, index=min(1, len(place_list)-1))
-
-st.sidebar.markdown("---")
-st.sidebar.markdown("### 🧪 Harder Error Testing Suite")
-st.sidebar.caption("จำลองสภาวะแวดล้อมวิกฤตบนโครงข่ายคนเดินเพื่อทดสอบเสถียรภาพ AI (The Harder, The Better)")
-err_elevator_break = st.sidebar.checkbox("🚨 Force Complete Elevator Breakdown (ระบบลิฟต์ขัดข้องรุนแรง)", value=False)
-err_flash_flood = st.sidebar.checkbox("🌧️ Flash Flood on Footpath (น้ำท่วมขังมิดระดับทางเท้า)", value=False)
-err_gridlock_surge = st.sidebar.checkbox("👨‍👩‍👧‍👦 Extreme Human Crowd Surge (+300% ความหนาแน่น)", value=False)
-
-# ─── MATHEMATICAL INTERSECTION ───────────────────────────────────────────────
-s_row = df_places[df_places['display_th'] == start_p].iloc[0]
-e_row = df_places[df_places['display_th'] == end_p].iloc[0]
-slat, slon = s_row['latitude'], s_row['longitude']
-elat, elon = e_row['latitude'], e_row['longitude']
-
-d_s = haversine_vec(slat, slon, bts_lats, bts_lons)
-bts_s = df_bts.iloc[int(np.argmin(d_s))]
-d_e = haversine_vec(elat, elon, bts_lats, bts_lons)
-bts_e = df_bts.iloc[int(np.argmin(d_e))]
-
-# คำนวณระยะทางรวมโครงข่ายทางเท้าจำลอง (Pure Pedestrian Resolution)
-total_pedestrian_dist = float(np.min(d_s) + haversine_vec(bts_s['lat'], bts_s['lng'], np.array([bts_e['lat']]), np.array([bts_e['lng']]))[0] + np.min(d_e))
-
-# ปรับพารามิเตอร์ตามชุดทดสอบความผิดพลาด (Stress Test Conditions)
-el_val = 0 if err_elevator_break else (1 if str(bts_s.get('มีลิฟต์','')) in ['1','มี'] else 0)
-rmp_val = 0 if err_flash_flood else (1 if str(bts_s.get('ทางลาดสำหรับรถเข็น','')) in ['1','มี'] else 0)
-acc_exit = 1 if (el_val and rmp_val) else 0
-crowd_lvl = 4 if err_gridlock_surge else crowd_map.get(str(bts_s.get('clean_name','')), 2)
-
-# ประมวลผลโมเดล AI ตัดสินใจเส้นทางคนเดินเท้า
-t_enc = le_transport.transform(["BTS"])[0]
-input_row = pd.DataFrame([[el_val, rmp_val, acc_exit, 30, 15, 1, 4, crowd_lvl, 1, 1, 0, t_enc]], columns=rf_features)
-r_label = int(route_rf.predict(input_row)[0])
-r_prob = float(route_rf.predict_proba(input_row)[0][1])
-
-# ─── MAIN PRESENTATION LAYOUT ────────────────────────────────────────────────
-col_ai_spec, col_metrics, col_test = st.columns([1.2, 1.1, 1.7])
-
-with col_ai_spec:
-    st.markdown("### 🤖 Specified AI Function Report")
-    st.caption("อธิบายหน้าที่และการทำงานของปัญญาประดิษฐ์ในระบบสัญจรทางเท้า")
+@st.cache_data
+def load_and_prepare_data():
+    df_places = pd.read_csv('bangkok_places_bus_spot.csv')
+    df_stations = pd.read_csv('bts_station.csv')
+    df_accessibility = pd.read_csv('BTS for wheelchair users spreadsheet - BTS green line.csv')
     
-    st.markdown("""
-    <div style="background-color:#2c3e50; padding:15px; border-radius:8px; color:white; margin-bottom:15px;">
-        <strong>🧠 AI Function: Pedestrian Route Viability Core</strong><br><br>
-        • <strong>Pain Point Solved:</strong> ผู้สัญจรและผู้พิการไม่สามารถประเมินได้ล่วงหน้าว่า โครงข่ายฟุตบาทต่อเนื่องและลิฟต์ยกตัวที่ปลายทางพร้อมใช้งานจริงหรือไม่ หรือมีความเสี่ยงเชิงพื้นที่ระดับใด<br><br>
-        • <strong>How AI Supports:</strong> ใช้แบบจำลองจำแนกประเภทคำนวณคะแนนและถ่วงน้ำหนักความปลอดภัยเชิงพื้นที่ประมวลผลออกมาเป็นความน่าจะเป็น เพื่อคัดกรองเส้นทางที่เป็นอันตรายออกไปก่อนเริ่มออกเดินเท้าจริง
-    </div>
-    """, unsafe_allow_html=True)
+    target_bus_file = 'ThaiSmalieBus  - Sheet1.csv' 
+    if not os.path.exists(target_bus_file):
+        all_files = os.listdir('.')
+        matched_files = [f for f in all_files if 'ThaiSmalieBus' in f or 'ThaiSmileBus' in f]
+        if matched_files:
+            target_bus_file = matched_files[0]
+            
+    df_bus_routes = pd.read_csv(target_bus_file)
     
-    st.markdown("---")
-    st.markdown("📊 **Top Feature Importance Weights**")
-    imp_df = pd.DataFrame(list(zip(rf_features, route_rf.feature_importances_)), columns=['Feature','Weight']).sort_values('Weight', ascending=False).head(4)
-    st.bar_chart(imp_df.set_index('Feature'), height=150)
+    df_stations['clean_name'] = df_stations['name'].str.replace('สถานี', '').str.strip()
+    df_accessibility['clean_name'] = df_accessibility['สถานี'].str.replace('สถานี', '').str.strip()
+    df_bts_master = pd.merge(
+        df_accessibility[['clean_name', 'สถานี', 'มีลิฟต์', 'ทางลาดสำหรับรถเข็น']], 
+        df_stations[['clean_name', 'lat', 'lng']], 
+        on='clean_name', how='inner'
+    ).drop_duplicates(subset=['clean_name']).reset_index(drop=True)
+    
+    return df_places, df_bts_master, df_bus_routes
 
-with col_metrics:
-    st.markdown("### 📊 Pure Pedestrian Route Matrix")
-    st.caption("ผลลัพธ์การคำนวณโครงข่ายทางเท้า (Isolated Pedestrian Layers Only)")
+try:
+    df_places, df_bts_master, df_bus_routes = load_and_prepare_data()
+except Exception as e:
+    st.error(f"❌ ระบบไม่สามารถอ่านฐานข้อมูลไฟล์ได้: {e}")
+    st.stop()
+
+# 🎯 พจนานุกรมแปลชื่อสถานที่บนหน้าเว็บเป็นภาษาไทย
+th_name_base_map = {
+    "Victory Monument": "อนุสาวรีย์ชัยสมรภูมิ",
+    "Siam Station": "สถานีรถไฟฟ้า สยาม",
+    "CentralWorld": "เซ็นทรัลเวิลด์",
+    "MBK Center": "เอ็มบีเค เซ็นเตอร์ (มาบุญครอง)",
+    "Samyan Mitrtown": "สามย่านมิตรทาวน์",
+    "Chulalongkorn Hospital": "โรงพยาบาลจุฬาลงกรณ์",
+    "Siriraj Hospital": "โรงพยาบาลศิริราช",
+    "Ramathibodi Hospital": "โรงพยาบาลรามาธิบดี",
+    "Rajavithi Hospital": "โรงพยาบาลราชวิถี",
+    "Vajira Hospital": "โรงพยาบาลวชิรพยาบาล",
+    "Mochit Bus Terminal": "สถานีขนส่งผู้โดยสารกรุงเทพ (หมอชิต 2)",
+    "Chatuchak Park": "สวนจตุจักร",
+    "Ari BTS Station": "สถานีรถไฟฟ้า อารีย์",
+    "Saphan Khwai BTS Station": "สถานีรถไฟฟ้า สะพานควาย",
+    "Kasetsart University": "มหาวิทยาลัยเกษตรศาสตร์",
+    "Bang Wa BTS Station": "สถานีรถไฟฟ้า บางหว้า",
+    "Bearing BTS Station": "สถานีรถไฟฟ้า แบริ่ง",
+    "Ekkamai Bus Terminal": "สถานีขนส่งเอกมัย"
+}
+
+bus_translation_dict = {
+    "Victory Monument": ["อนุสาวรีย์", "รพ.ราชวิถี", "ราชวิถี"],
+    "Chulalongkorn Hospital": ["จุฬาลงกรณ์", "สามย่าน", "รพ.จุฬา"],
+    "Siam Station": ["สยาม", "ปทุมวัน"],
+    "Samyan Mitrtown": ["สามย่าน", "หัวลำโพง"],
+    "Ramathibodi Hospital": ["รพ.สงฆ์", "วิชัยยุทธ", "รามาธิบดี"],
+    "Siriraj Hospital": ["ศิริราช", "พรานนก"],
+    "Rajavithi Hospital": ["รพ.ราชวิถี", "อนุสาวรีย์"],
+    "Hua Lamphong Station": ["หัวลำโพง"],
+    "Chatuchak Park": ["BTSหมอชิต", "ห้าแยกลาดพร้าว"]
+}
+
+# คำนวณทำป้ายวงเล็บแจ้งสายรถเมล์และ BTS ใน Dropdown
+display_names_th_with_brackets = []
+for idx, row in df_places.iterrows():
+    p_name = row['place_name']
+    th_name = th_name_base_map.get(p_name, p_name)
+    suffixes = []
     
-    st.metric("📏 ระยะทางเท้าสุทธิ (Pedestrian Dist)", f"{total_pedestrian_dist:.1f} เมตร")
-    st.metric("⏱️ เวลาเดินเท้าโดยประมาณ", f"{int(total_pedestrian_dist / 1.2 / 60)} นาที")
-    
-    st.markdown("---")
-    st.markdown("🎯 **AI Core Decision Status:**")
-    if r_label == 1 and not err_elevator_break:
-        st.success(f"🟢 อนุมัติเส้นทางสัญจร\n\n({r_prob*100:.1f}% Confidence Pass)")
-    else:
-        st.error(f"🔴 ปฏิเสธเส้นทางสัญจรนี้\n\n({r_prob*100:.1f}% Unsafe Target)")
+    df_bts_master['temp_dist'] = [haversine_distance(row['latitude'], row['longitude'], r['lat'], r['lng']) for i, r in df_bts_master.iterrows()]
+    min_bts_dist = df_bts_master['temp_dist'].min()
+    if "bts" in p_name.lower() or min_bts_dist <= 500:
+        suffixes.append("BTS")
         
-    st.markdown("---")
-    st.markdown("📋 **Pedestrian Sequence Guide:**")
-    st.write(f"1. ออกจาก: `{start_p}`")
-    st.write(f"2. เชื่อมต่ออารยสถาปัตย์ที่: `{bts_s['clean_name']}`")
-    st.write(f"3. ผ่านโครงข่ายเชื่อมต่อถึง: `{bts_e['clean_name']}`")
-    st.write(f"4. ถึงจุดหมายเท้า: `{end_p}`")
-
-with col_test:
-    st.markdown("### 🧪 Harder Stress Test Analytics")
-    st.caption("ประเมินเสถียรภาพของ AI ภายใต้เงื่อนไขความผิดพลาดเชิงซ้อนขั้นรุนแรง")
-    
-    # ตารางวิเคราะห์เงื่อนไขสภาวะแวดล้อมจำลองแบบตัวเลข
-    st.markdown("⚙️ **Environmental Stress Variables Status:**")
-    st.info(f"• สถานะระบบลิฟต์ยกตัว (Elevator State): `{'🚨 SHUTDOWN / BREAKDOWN' if err_elevator_break else '✅ ACTIVE / OPERATIONAL'}`")
-    st.info(f"• ระดับน้ำท่วมขังบนฟุตบาท (Flash Flood State): `{'🚨 CRITICAL FLOOD / BLOCK' if err_flash_flood else '✅ NORMAL DRY'}`")
-    st.info(f"• ความหนาแน่นของฝูงชน (Crowd Multiplier): `{'🚨 SURGE GRIDLOCK (+300%)' if err_gridlock_surge else '✅ NORMAL CAPACITY'}`")
-    
-    st.markdown("---")
-    st.markdown("🎯 **Is the result expected? (การประเมินผลลัพธ์ระบบ)**")
-    
-    if err_elevator_break or err_flash_flood or err_gridlock_surge:
-        st.markdown("<h4 style='color:#3498db;'>✅ Evaluation: YES (EXPECTED RESULT)</h4>", unsafe_allow_html=True)
-        st.caption("คำอธิบาย: เมื่อระบบเปิดใช้งาน Harder Stress Test (เช่น ลิฟต์เสียหรือน้ำท่วม) โมเดล AI ตอบสนองได้อย่างถูกต้องและแม่นยำ โดยปรับสถานะเป็นความเสี่ยงสูง (Unsafe) ทันที เพื่อปกป้องผู้พิการและคนเดินเท้า ผลลัพธ์เป็นไปตามทฤษฎีแมชชีนเลิร์นนิงและตรรกะซอฟต์แวร์ที่วางไว้ทุกประการ")
+    keywords = bus_translation_dict.get(p_name, [p_name])
+    local_bus_lines = []
+    for b_idx, b_row in df_bus_routes.iterrows():
+        route_text = str(b_row['ต้นทาง']) + str(b_row['ปลาย']) + str(b_row['ผ่าน'])
+        if any(k.lower() in route_text.lower() for k in keywords):
+            local_bus_lines.append(str(b_row['สาย']).strip())
+            
+    if local_bus_lines:
+        unique_local_buses = sorted(list(set(local_bus_lines)))
+        suffixes.append(f"รถเมล์ สาย: {', '.join(unique_local_buses)}")
         
-        # กล่องแจ้งเตือนความเสี่ยงเชิงลึก (Risk Dashboard)
-        st.warning("🚨 **AI Automated Contingency Alert:** ตรวจพบความเสี่ยงขั้นวิกฤตบนโครงข่ายสัญจรคนเดินเท้า แนะนำให้งดการสัญจรลำพัง และเปลี่ยนรูปแบบไปใช้บริการรถรับส่งชานต่ำเฉพาะทาง (Low-Floor Transit System) ทันที")
-    else:
-        st.markdown("<h4 style='color:#2ecc71;'>✅ Evaluation: YES (EXPECTED RESULT)</h4>", unsafe_allow_html=True)
-        st.caption("คำอธิบาย: ระบบทำงานอยู่ในโหมดพารามิเตอร์ปกติ ข้อมูลทางกายภาพสอดคล้องกับสภาพแวดล้อมอารยสถาปัตย์จริงบนฐานข้อมูล")
+    final_display = f"{th_name} ({' / '.join(suffixes)})" if suffixes else th_name
+    display_names_th_with_brackets.append(final_display)
 
-st.markdown("---")
-st.caption("📐 AI Accessibility Route Planner v11.0 | Pure Pedestrian Analytical Infrastructure | Minimalist Edition (No Maps / No Footpath Simulator)")
+df_places['display_name_th'] = display_names_th_with_brackets
+place_list_th = sorted(df_places['display_name_th'].tolist())
+
+# ─── แถบเมนูด้านซ้าย (Sidebar) ───
+st.sidebar.header("🕹️ เมนูเลือกการเดินทาง")
+
+default_start_idx = 0
+default_end_idx = 0
+for i, name in enumerate(place_list_th):
+    if "อนุสาวรีย์ชัยสมรภูมิ" in name:
+        default_start_idx = i
+    if "โรงพยาบาลจุฬาลงกรณ์" in name:
+        default_end_idx = i
+
+start_label_th = st.sidebar.selectbox("📍 เลือกจุดต้นทาง:", place_list_th, index=default_start_idx)
+end_label_th = st.sidebar.selectbox("🏁 เลือกจุดปลายทาง:", place_list_th, index=default_end_idx)
+
+start_info = df_places[df_places['display_name_th'] == start_label_th].iloc[0]
+end_info = df_places[df_places['display_name_th'] == end_label_th].iloc[0]
+
+start_place_name = start_info['place_name']
+end_place_name = end_info['place_name']
+
+st.sidebar.write("---")
+st.sidebar.markdown("### 🚌 เลือกโหมดการเดินทาง")
+travel_mode = st.sidebar.radio(
+    "โปรดเลือกรูปแบบการเดินทางหลักที่สะดวก:",
+    [
+        "🚇 รถไฟฟ้า (BTS) - เน้นเดินทางเร็ว",
+        "🚌 รถเมล์ชานต่ำ (Thai Smile Bus) - เน้นประหยัด",
+        "🏥 สวัสดิการรถตู้รัฐ/กทม. ฟรี (สำหรับไปโรงพยาบาล)"
+    ]
+)
+
+is_hospital = any(keyword in end_place_name.lower() for keyword in ["hospital", "โรงพยาบาล", "รพ."])
+matched_lines = []
+
+col1, col2 = st.columns([1.1, 1.9])
+
+with col1:
+    st.markdown(f"### 📊 แผนผังนำทางอัจฉริยะ")
+    st.write(f"**จาก:** {start_label_th.split(' (')[0]}")
+    st.write(f"**ถึง:** {end_label_th.split(' (')[0]}")
+    st.write("---")
+
+    # 🚇 1. โหมด BTS
+    if "🚇" in travel_mode:
+        df_bts_master['dist_start'] = [haversine_distance(start_info['latitude'], start_info['longitude'], r['lat'], r['lng']) for i, r in df_bts_master.iterrows()]
+        nearest_bts_start = df_bts_master.sort_values(by='dist_start').iloc[0]
+
+        df_bts_master['dist_end'] = [haversine_distance(end_info['latitude'], end_info['longitude'], r['lat'], r['lng']) for i, r in df_bts_master.iterrows()]
+        nearest_bts_end = df_bts_master.sort_values(by='dist_end').iloc[0]
+
+        transport_first_leg = "🚶 เข็นวีลแชร์เดินเท้า" if nearest_bts_start['dist_start'] <= 150 else "🚖 แนะนำเรียกใช้บริการ แกร็บ (Grab) หรือ แท็กซี่"
+        transport_last_leg = "🚶 เข็นวีลแชร์เดินเท้า" if nearest_bts_end['dist_end'] <= 150 else "🚖 แนะนำเรียกใช้บริการ แกร็บ (Grab) หรือ แท็กซี่"
+
+        has_lift_start = "มี" if str(nearest_bts_start['มีลิฟต์']).strip() in ['1', '1.0', 'มี', 'Yes'] else "ไม่มี"
+        has_ramp_start = "มี" if str(nearest_bts_start['ทางลาดสำหรับรถเข็น']).strip() in ['1', '1.0', 'มี', 'Yes'] else "ไม่มี"
+        
+        has_lift_end = "มี" if str(nearest_bts_end['มีลิฟต์']).strip() in ['1', '1.0', 'มี', 'Yes'] else "ไม่มี"
+        has_ramp_end = "มี" if str(nearest_bts_end['ทางลาดสำหรับรถเข็น']).strip() in ['1', '1.0', 'มี', 'Yes'] else "ไม่มี"
+
+        st.info(f"**🟢 ขั้นที่ 1:** {transport_first_leg} ไปยัง **สถานีรถไฟฟ้า BTS {nearest_bts_start['clean_name']}** (ระยะทาง {nearest_bts_start['dist_start']:.1f} เมตร)")
+        st.write(f"* มีลิฟต์วีลแชร์ = **{has_lift_start}** | มีทางลาด = **{has_ramp_start}**")
+        st.write("")
+
+        if nearest_bts_start['clean_name'] != nearest_bts_end['clean_name']:
+            st.info(f"**🔵 ขั้นที่ 2:** เดินทางด้วยระบบรางจากสถานี **{nearest_bts_start['clean_name']}** ไปลงที่สถานีปลายทาง **{nearest_bts_end['clean_name']}**")
+        
+        st.info(f"**🔴 ขั้นที่ 3:** {transport_last_leg} เข้าสู่พิกัดเป้าหมาย **{end_label_th.split(' (')[0]}** (ระยะทาง {nearest_bts_end['dist_end']:.1f} เมตร)")
+        st.write(f"* มีลิฟต์วีลแชร์ = **{has_lift_end}** | มีทางลาด = **{has_ramp_end}**")
+
+    # 🚌 2. โหมดรถเมล์ชานต่ำ
+    elif "🚌" in travel_mode:
+        st.markdown("#### 𚏏 ผลคำนวณการเดินรถโดยสารอารยสถาปัตย์")
+        
+        start_keywords = bus_translation_dict.get(start_place_name, [start_place_name])
+        end_keywords = bus_translation_dict.get(end_place_name, [end_place_name])
+        
+        for idx, row in df_bus_routes.iterrows():
+            route_text = str(row['ต้นทาง']) + str(row['ปลาย']) + str(row['ผ่าน'])
+            if any(k.lower() in route_text.lower() for k in start_keywords) and any(k.lower() in route_text.lower() for k in end_keywords):
+                matched_lines.append(str(row['สาย']).strip())
+
+        if matched_lines:
+            unique_lines_list = sorted(list(set(matched_lines)))
+            all_suggested_lines = " หรือ สาย ".join(unique_lines_list)
+            
+            st.success(f"✅ **AI แนะนำรถเมล์ชานต่ำสาย: {all_suggested_lines}**")
+            st.markdown(f"""
+            **📋 ขั้นตอนการเดินทาง:**
+            1. **🚶 จุดขึ้นรถ:** ไปยังป้ายหยุดรถประจำทาง ณ **{start_label_th.split(' (')[0]}**
+            2. **💳 การขึ้นรถ:** ขึ้นรถเมล์สาย **{all_suggested_lines}** (ตัวรถชานต่ำ มีแรมป์ระบบไฮโดรลิก)
+            3. **🏁 จุดหมาย:** ลงรถ ณ จุดจอดเป้าหมาย **{end_label_th.split(' (')[0]}**
+            """)
+        else:
+            st.warning("🔄 ไม่พบสายรถเมล์ต่อเดียว --- ระบบจัดแผนเชื่อมต่อพ่วงระบบรถไฟฟ้าให้ทดแทน:")
+            df_bts_master['dist_start'] = [haversine_distance(start_info['latitude'], start_info['longitude'], r['lat'], r['lng']) for i, r in df_bts_master.iterrows()]
+            nearest_bts_start = df_bts_master.sort_values(by='dist_start').iloc[0]
+            df_bts_master['dist_end'] = [haversine_distance(end_info['latitude'], end_info['longitude'], r['lat'], r['lng']) for i, r in df_bts_master.iterrows()]
+            nearest_bts_end = df_bts_master.sort_values(by='dist_end').iloc[0]
+            
+            st.markdown(f"""
+            * **🟢 ช่วงที่ 1:** มุ่งหน้าไปยัง **สถานี BTS {nearest_bts_start['clean_name']}** ({nearest_bts_start['dist_start']:.1f} ม.)
+            * **🔵 ช่วงที่ 2:** นั่งรถไฟฟ้า BTS จากสถานี **{nearest_bts_start['clean_name']}** ไปยังสถานี **{nearest_bts_end['clean_name']}**
+            * **🔴 ช่วงที่ 3:** เข้าสู่พิกัดเป้าหมายปลายทาง **{end_label_th.split(' (')[0]}** ({nearest_bts_end['dist_end']:.1f} ม.)
+            """)
+
+    # 🏥 3. โหมดสวัสดิการรถตู้รัฐ
+    elif "🏥" in travel_mode:
+        if is_hospital:
+            st.warning("🏥 **ยืนยันสิทธิ์รับสวัสดิการรถสถานพยาบาลสำเร็จ**")
+            st.markdown("""
+            * 📞 **บริการรถตู้ กทม.:** นัดหมายล่วงหน้าที่สายด่วน **โทร. 1555** หรือ **1479**
+            * 🚑 **บริการรถรับส่ง สปสช.:** ติดต่อสายด่วน **โทร. 1330**
+            """)
+        else:
+            st.error("❌ เงื่อนไขไม่ตรงตามเกณฑ์สวัสดิการ")
+            st.write(f"จำกัดสิทธิ์เฉพาะการเดินทางไป **โรงพยาบาล** เท่านั้น ปัจจุบันเลือกเป็น *{end_label_th.split(' (')[0]}*")
+
+with col2:
+    st.markdown("### 🗺️ OpenRoute Engine GIS Canvas")
+    
+    # ดึงค่าพิกัดความพร้อมสถานีรอบตัวอีกครั้งสำหรับปักหมุดโครงข่ายแผนที่
+    df_bts_master['dist_start'] = [haversine_distance(start_info['latitude'], start_info['longitude'], r['lat'], r['lng']) for i, r in df_bts_master.iterrows()]
+    nearest_bts_start = df_bts_master.sort_values(by='dist_start').iloc[0]
+    df_bts_master['dist_end'] = [haversine_distance(end_info['latitude'], end_info['longitude'], r['lat'], r['lng']) for i, r in df_bts_master.iterrows()]
+    nearest_bts_end = df_bts_master.sort_values(by='dist_end').iloc[0]
+    
+    # สร้าง Map
+    m = folium.Map(location=[(start_info['latitude'] + end_info['latitude'])/2, (start_info['longitude'] + end_info['longitude'])/2], zoom_start=13, tiles='CartoDB Positron')
+    
+    # ปักหมุดหลัก ต้นทาง และปลายทาง
+    folium.Marker([start_info['latitude'], start_info['longitude']], popup=f"ต้นทาง: {start_label_th.split(' (')[0]}", icon=folium.Icon(color='orange', icon='user', prefix='fa')).add_to(m)
+    folium.Marker([end_info['latitude'], end_info['longitude']], popup=f"ปลายทาง: {end_label_th.split(' (')[0]}", icon=folium.Icon(color='red', icon='flag', prefix='fa')).add_to(m)
+    
+    # วาดเส้นและดึงพิกัดจากระบบเชื่อมโครงข่ายทางถนนจริง (OpenRoute OSRM API Layer)
+    if "🚇" in travel_mode or (not matched_lines and "🚌" in travel_mode):
+        # ปักหมุดสถานี BTS
+        folium.Marker([nearest_bts_start['lat'], nearest_bts_start['lng']], popup=f"BTS: {nearest_bts_start['clean_name']}", icon=folium.Icon(color='blue', icon='train', prefix='fa')).add_to(m)
+        folium.Marker([nearest_bts_end['lat'], nearest_bts_end['lng']], popup=f"BTS: {nearest_bts_end['clean_name']}", icon=folium.Icon(color='blue', icon='train', prefix='fa')).add_to(m)
+        
+        # 🟢 1. ดึงพิกัดนำทางจริงช่วงที่ 1 (ต้นทางเดินเท้า -> BTS แรก)
+        leg1_
