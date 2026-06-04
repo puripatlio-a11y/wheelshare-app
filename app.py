@@ -1,6 +1,6 @@
 """
-AI Accessibility Route Planner — Version 9.1 (Bug Fix - Path Resolution)
-แก้ปัญหา FileNotFoundError บน Streamlit Cloud โดยใช้ Dynamic Data Path Fallback System
+AI Accessibility Route Planner — Version 9.2 (Ultra-Resilient Bug Fix)
+แก้ปัญหา FileNotFoundError อย่างเบ็ดเสร็จด้วยระบบ Smart Keyword Search Engine & Self-Diagnostic Fallback
 """
 
 import streamlit as st
@@ -30,7 +30,7 @@ st.markdown("""
 .ai-badge { background:#e74c3c; color:white; padding:6px 16px; border-radius:20px; font-size:0.9rem; font-weight:bold; display:inline-block; margin-top:8px; }
 </style>
 <div class="custom-header">
-  <h1>♿ AI Pedestrian Accessibility Route Planner (V9.1)</h1>
+  <h1>♿ AI Pedestrian Accessibility Route Planner (V9.2)</h1>
   <h3>ระบบวิเคราะห์เส้นทางฟุตบาทคนเดินด้วยปัญญาประดิษฐ์ (Focus in AI & Error Testing)</h3>
   <span class="ai-badge">🔬 Hardcore Error Testing Model Enabled</span>
 </div>
@@ -57,24 +57,62 @@ def haversine_vec(lat1, lon1, lat2_arr, lon2_arr):
     a = np.sin(dlat/2)**2 + np.cos(la1)*np.cos(la2)*np.sin(dlon/2)**2
     return R * 2 * np.arcsin(np.sqrt(a))
 
-# ─── LOAD & PRECOMPUTE DATA ──────────────────────────────────────────────────
+# ─── LOAD & PRECOMPUTE DATA WITH SMART SEARCH ────────────────────────────────
 @st.cache_data
 def load_and_precompute():
-    # 🔍 ระบบตรวจจับตำแหน่งไฟล์อัตโนมัติ (Dynamic Path Resolution) เพื่อป้องกัน FileNotFoundError
-    if os.path.exists("bangkok_places_bus_spot.csv"):
-        base = "."
-    elif os.path.exists("data/bangkok_places_bus_spot.csv"):
-        base = "./data"
-    else:
-        base = "/mnt/user-data/uploads"  # โฟลเดอร์สำรองกรณีรันในสภาพแวดล้อมเก่า
+    def smart_load_csv(keyword, default_name):
+        """ค้นหาไฟล์แบบอัจฉริยะจาก Keyword รองรับกรณีชื่อไฟล์พิมพ์เล็กใหญ่ไม่ตรงกันหรืออยู่ในโฟลเดอร์ย่อย"""
+        search_dirs = [".", "data", "Data", "/mnt/user-data/uploads"]
+        
+        # 1. ลองค้นหาแบบชื่อตรงตัวเป๊ะๆ ก่อน
+        for d in search_dirs:
+            path = os.path.join(d, default_name)
+            if os.path.exists(path):
+                return pd.read_csv(path)
+        
+        # 2. ค้นหาแบบสแกนหา Keyword ทั่วโปรเจกต์ (Case-Insensitive)
+        for d in search_dirs:
+            if os.path.exists(d):
+                for root, dirs, files in os.walk(d):
+                    for f in files:
+                        if keyword.lower() in f.lower() and f.endswith('.csv'):
+                            return pd.read_csv(os.path.join(root, f))
+                            
+        # 3. หากไม่พบเลย ให้ปล่อยผ่านไปให้ระบุข้อผิดพลาดใน try-except หลัก
+        raise FileNotFoundError(f"Missing required data file matching keyword: '{keyword}' (Expected: {default_name})")
 
-    df_places    = pd.read_csv(f"{base}/bangkok_places_bus_spot.csv")
-    df_stations  = pd.read_csv(f"{base}/bts_station.csv")
-    df_acc       = pd.read_csv(f"{base}/BTS_for_wheelchair_users_spreadsheet_-_BTS_green_line.csv")
-    df_bus_stops = pd.read_csv(f"{base}/bangkok_bus_stops_coordinates.csv")
-    df_passenger = pd.read_csv(f"{base}/bangkok_transit_passenger_data__1_.csv")
-    df_rf        = pd.read_csv(f"{base}/wheelchair_random_forest_300rows.csv")
+    try:
+        df_places    = smart_load_csv("places_bus_spot", "bangkok_places_bus_spot.csv")
+        df_stations  = smart_load_csv("bts_station", "bts_station.csv")
+        df_acc       = smart_load_csv("green_line", "BTS_for_wheelchair_users_spreadsheet_-_BTS_green_line.csv")
+        df_bus_stops = smart_load_csv("bus_stops", "bangkok_bus_stops_coordinates.csv")
+        df_passenger = smart_load_csv("passenger", "bangkok_transit_passenger_data__1_.csv")
+        df_rf        = smart_load_csv("random_forest", "wheelchair_random_forest_300rows.csv")
+        
+    except Exception as e:
+        # 🧪 ระบบการจัดการข้อผิดพลาดระดับสูง (Self-Diagnostic Fallback)
+        st.error("❌ ไม่พบไฟล์ข้อมูลสำคัญบางไฟล์ในระบบ GitHub Repository ของคุณ")
+        st.markdown("### 🔍 แผงวินิจฉัยโครงสร้างไฟล์อัตโนมัติ (Diagnostic Panel):")
+        st.warning("กรุณาตรวจสอบว่าชื่อไฟล์บน GitHub ของคุณตรงกับรายการด้านล่างนี้หรือไม่ หรือตรวจสอบตัวพิมพ์เล็ก-ใหญ่")
+        
+        # แสดงไฟล์ .csv ทั้งหมดที่เจอบนระบบจริง ณ ขณะนั้นเพื่อให้น้องใช้เช็คชื่อไฟล์ได้ทันที
+        csv_found = []
+        for root, dirs, files in os.walk("."):
+            for f in files:
+                if f.endswith('.csv'):
+                    csv_found.append(os.path.join(root, f))
+                    
+        if csv_found:
+            st.write("📋 **ไฟล์ข้อมูลสัญกรณ์ `.csv` ที่พบบน Repository ของคุณในตอนนี้:**")
+            for path in csv_found:
+                st.code(path)
+        else:
+            st.error("⚠️ ไม่พบไฟล์นามสกุล `.csv` ใดๆ เลยในโปรเจกต์ของคุณ กรุณาอัปโหลดไฟล์ข้อมูลทั้ง 6 ไฟล์ขึ้นสู่ GitHub")
+            
+        st.info(f"ข้อความแจ้งเตือนจากระบบส่วนลึก: `{str(e)}`")
+        st.stop()
 
+    # ล้างและจัดการข้อมูลเบื้องต้น
     df_stations['clean_name'] = df_stations['name'].str.replace('สถานี','').str.strip()
     df_acc['clean_name']      = df_acc['สถานี'].str.replace('สถานี','').str.strip()
 
@@ -266,7 +304,6 @@ with col_slates:
     st.write(f"- อัตราความหนาแน่น: `{metric_crowd}`")
     
     st.markdown("---")
-    st.markdown("---")
     st.markdown("🔎 **ผลลัพธ์การทดสอบระบบ (Expected vs Actual):**")
     
     if err_elevator_break or err_extreme_weather or sw_width < 0.8:
@@ -328,4 +365,4 @@ with col_canvas:
     st_folium(m, width="100%", height=520)
 
 st.markdown("---")
-st.caption("📐 AI Accessibility Route Planner v9.1 | Focus Mode: Pedestrians Only | Strict Test Criteria Activated")
+st.caption("📐 AI Accessibility Route Planner v9.2 | Focus Mode: Pedestrians Only | Strict Test Criteria Activated")
