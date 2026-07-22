@@ -100,28 +100,13 @@ def get_open_route_coordinates(start_lat, start_lon, end_lat, end_lon, mode="foo
 
 # 📡 ดึงพิกัดตามเส้นทางรถไฟฟ้า BTS (แกะรอยตามแนวถนนจริงระหว่างทุกๆ สถานีย่อย)
 def get_bts_route_coordinates(path_stations, bts_dict):
-    if not path_stations or len(path_stations) < 2:
-        return []
-    
-    full_route_coords = []
-    for i in range(len(path_stations) - 1):
-        st1_name = path_stations[i]
-        st2_name = path_stations[i+1]
-        
-        if st1_name in bts_dict and st2_name in bts_dict:
-            coord1 = bts_dict[st1_name]
-            coord2 = bts_dict[st2_name]
-            
-            # เรียก OSRM ดึงพิกัดบนถนนจริงระหว่างสถานีติดกัน
-            segment_coords = get_open_route_coordinates(coord1[0], coord1[1], coord2[0], coord2[1], mode="car")
-            
-            if full_route_coords:
-                full_route_coords.extend(segment_coords[1:]) # ป้องกันจุดพิกัดซ้ำกัน
-            else:
-                full_route_coords.extend(segment_coords)
-                
-    return full_route_coords
+    coords = []
 
+    for station in path_stations:
+        if station in bts_dict:
+            coords.append(bts_dict[station])
+
+    return coords
 # ─── AREA 3: DATA INGESTION ENGINE ──────────────────────────────────────────
 
 # 📌 Dictionary พิกัดสถานี BTS
