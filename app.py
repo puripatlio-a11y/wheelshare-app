@@ -130,7 +130,8 @@ BTS_GRAPH = {
 }
 
 # ─── 2. HELPER FUNCTIONS & GRAPH ALGORITHMS ──────────────────────────────
-elif mode_code == "bts":
+# 2. โหมด BTS (ปรับปรุงให้วาดเส้นทางเลี้ยวตามถนนจริง 100%)
+    elif mode_code == "bts":
         # คำนวณหาสถานี BTS ต้นทางและปลายทางที่ใกล้จุด Origin/Destination ที่สุด
         df_bts_master["dist_s"] = [haversine_distance(start_info["latitude"], start_info["longitude"], r["lat"], r["lng"]) for i, r in df_bts_master.iterrows()]
         df_bts_master["dist_e"] = [haversine_distance(end_info["latitude"], end_info["longitude"], r["lat"], r["lng"]) for i, r in df_bts_master.iterrows()]
@@ -144,46 +145,60 @@ elif mode_code == "bts":
         # ค้นหาเส้นทางบน Network Graph ผ่าน BFS
         station_path = find_bts_path(bts_start_name, bts_end_name)
 
-        # 2.1 Leg 1: เดินจากจุดเริ่มต้น -> สถานีขึ้น BTS (ใช้ถนนจริง OSRM)
+        # ------------------------------------------------------------------
+        # 🟢 Leg 1: เดินเข็นจากจุดเริ่มต้น -> สถานีขึ้น BTS (ใช้ถนนจริง OSRM)
+        # ------------------------------------------------------------------
         leg1_coords, leg1_dist, leg1_time = get_osrm_route(start_info["latitude"], start_info["longitude"], bts_s["lat"], bts_s["lng"], mode="foot")
-        
-        # 2.2 Leg 2: พิกัดสถานีบนราง
-        bts_route_coords = [BTS_STATIONS[name] for name in station_path]
-        num_stations = max(0, len(station_path) - 1)
-        bts_time_sec = num_stations * 150  # เฉลี่ย 2.5 นาทีต่อสถานี
-        
-        bts_dist_m = 0
-        for i in range(len(bts_route_coords) - 1):
-            bts_dist_m += haversine_distance(bts_route_coords[i][0], bts_route_coords[i][1], bts_route_coords[i+1][0], bts_route_coords[i+1][1])
-
-        # 2.3 Leg 3: เดินจากสถานีลง BTS -> จุดหมายปลายทาง (ใช้ถนนจริง OSRM)
-        leg3_coords, leg3_dist, leg3_time = get_osrm_route(bts_e["lat"], bts_e["lng"], end_info["latitude"], end_info["longitude"], mode="foot")
-
-        total_dist_m = leg1_dist + bts_dist_m + leg3_dist
-        total_time_sec = leg1_time + bts_time_sec + leg3_time
-
-        # --- วาดเส้นทางบนแผนที่ ---
-        # 1. เส้นทางเดินเท้าจริง (Leg 1 & Leg 3)
         folium.PolyLine(leg1_coords, color="#34A853", weight=6, tooltip="เดินเท้าไปสถานี BTS").add_to(m)
+
+        # ------------------------------------------------------------------
+        # 🚇 Leg 2: วิ่งบนราง/ถนนตามแนว BTS โดยดึงเส้นทาง OSRM เชื่อมทีละสถานี (เลี้ยวตามถนนจริง)
+        # ------------------------------------------------------------------
+        bts_total_dist_m = 0
+        all_bts_road_coords = []
+
+        if len(station_path) > 1:
+            for i in range(len(station_path) - 1):
+                st_curr = station_path[i]
+                st_next = station_path[i+1]
+                pos_curr = BTS_STATIONS[st_curr]
+                pos_next = BTS_STATIONS[st_next]
+
+                # ดึงเส้นทางถนนจริงเชื่อมระหว่างสถานีต่อสถานีผ่าน OSRM
+                seg_coords, seg_dist, _ = get_osrm_route(pos_curr[0], pos_curr[1], pos_next[0], pos_next[1], mode="driving")
+                bts_total_dist_m += seg_dist
+                
+                # รวม พิกัดถนนจริงเข้าด้วยกัน
+                all_bts_road_coords.extend(seg_coords)
+            
+            # วาดเส้นทางแนว BTS ที่เลี้ยวโค้งตามถนนจริงลงบนแผนที่
+            folium.PolyLine(
+                all_bts_road_coords, 
+                color="#0F9D58", 
+                weight=7, 
+                opacity=0.85, 
+                tooltip=f"แนวเส้นทาง BTS ({len(station_path)-1} สถานี)"
+            ).add_to(m)
+
+        # ------------------------------------------------------------------
+        # 🔴 Leg 3: เดินเข็นจากสถานีลง BTS -> จุดหมายปลายทาง (ใช้ถนนจริง OSRM)
+        # ------------------------------------------------------------------
+        leg3_coords, leg3_dist, leg3_time = get_osrm_route(bts_e["lat"], bts_e["lng"], end_info["latitude"], end_info["longitude"], mode="foot")
         folium.PolyLine(leg3_coords, color="#EA4335", weight=6, tooltip="เดินเท้าไปยังจุดหมาย").add_to(m)
 
-        # 2. เส้นทางราง BTS (ใช้เส้นประเพื่อสื่อว่าเป็น Transit Line ไม่ใช่ทางเดินเท้า)
-        folium.PolyLine(
-            bts_route_coords, 
-            color="#0F9D58", 
-            weight=4, 
-            opacity=0.8, 
-            dash_array="8, 8", 
-            tooltip=f"แนวเส้นทาง BTS ({num_stations} สถานี)"
-        ).add_to(m)
+        # คำนวณเวลารวม
+        num_stations = max(0, len(station_path) - 1)
+        bts_time_sec = num_stations * 120  # เวลาเฉลี่ยบนรถไฟฟ้า 2 นาที/สถานี
+        total_dist_m = leg1_dist + bts_total_dist_m + leg3_dist
+        total_time_sec = leg1_time + bts_time_sec + leg3_time
 
-        # 3. แสดง Node สถานีรายทาง
+        # 📍 วาด หมุด (CircleMarker) แสดงสถานี BTS รายทาง
         for st_name in station_path:
             pos = BTS_STATIONS[st_name]
             is_interchange = st_name == "สยาม"
             folium.CircleMarker(
                 location=pos,
-                radius=7 if is_interchange else 4,
+                radius=8 if is_interchange else 5,
                 popup=f"สถานี {st_name} {'(จุดเปลี่ยนสาย Interchange)' if is_interchange else ''}",
                 color="red" if is_interchange else "#0F9D58",
                 fill=True,
@@ -193,7 +208,7 @@ elif mode_code == "bts":
         folium.Marker([bts_s["lat"], bts_s["lng"]], popup=f"ขึ้นสถานี: {bts_s['clean_name']}", icon=folium.Icon(color="blue", icon="train", prefix="fa")).add_to(m)
         folium.Marker([bts_e["lat"], bts_e["lng"]], popup=f"ลงสถานี: {bts_e['clean_name']}", icon=folium.Icon(color="blue", icon="train", prefix="fa")).add_to(m)
 
-        # Display Card Summary
+        # สรุปข้อมูลการเดินทาง
         st.markdown(f"""
         <div class="time-card">
             <div class="time-main">⏱️ {int(total_time_sec//60)} นาที</div>
@@ -203,11 +218,10 @@ elif mode_code == "bts":
         
         st.success(f"✅ **ลำดับสถานีที่ผ่าน ({len(station_path)} สถานี):**\n\n" + " ➔ ".join(station_path))
         st.info(f"""
-        * 🟢 **เดินเท้า/เข็นไปสถานีต้นทาง:** {bts_start_name} ({leg1_dist:.0f} เมตร) - *วาดเส้นตามถนนจริง*
+        * 🟢 **เดินเท้า/เข็นไปสถานีต้นทาง:** {bts_start_name} ({leg1_dist:.0f} เมตร) - *ตามทางเท้าถนนจริง*
         * 🛗 **สิ่งอำนวยความสะดวก:** มีลิฟต์และทางลาดรองรับรถเข็น
-        * 🔴 **เดินเท้า/เข็นจากสถานีปลายทาง:** {bts_end_name} ไปจุดหมาย ({leg3_dist:.0f} เมตร) - *วาดเส้นตามถนนจริง*
+        * 🔴 **เดินเท้า/เข็นจากสถานีปลายทาง:** {bts_end_name} ไปจุดหมาย ({leg3_dist:.0f} เมตร) - *ตามทางเท้าถนนจริง*
         """)
-
 # ─── 3. DATA LOADING & AI MODEL TRAINING ──────────────────────────────────
 @st.cache_data
 def load_data():
