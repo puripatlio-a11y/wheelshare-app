@@ -100,13 +100,26 @@ def get_open_route_coordinates(start_lat, start_lon, end_lat, end_lon, mode="foo
 
 # 📡 ดึงพิกัดตามเส้นทางรถไฟฟ้า BTS (แกะรอยตามแนวถนนจริงระหว่างทุกๆ สถานีย่อย)
 def get_bts_route_coordinates(path_stations, bts_dict):
-    coords = []
 
-    for station in path_stations:
-        if station in bts_dict:
-            coords.append(bts_dict[station])
+    route = []
 
-    return coords
+    for i in range(len(path_stations)-1):
+
+        s = bts_dict[path_stations[i]]
+        e = bts_dict[path_stations[i+1]]
+
+        segment = get_open_route_coordinates(
+            s[0], s[1],
+            e[0], e[1],
+            mode="car"
+        )
+
+        if i > 0:
+            segment = segment[1:]
+
+        route.extend(segment)
+
+    return route
 # ─── AREA 3: DATA INGESTION ENGINE ──────────────────────────────────────────
 
 # 📌 Dictionary พิกัดสถานี BTS
