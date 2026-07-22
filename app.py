@@ -99,7 +99,7 @@ def get_open_route_coordinates(start_lat, start_lon, end_lat, end_lon, mode="foo
 
 # ─── AREA 3: DATA INGESTION ENGINE ──────────────────────────────────────────
 
-# 📌 เพิ่ม Dictionary พิกัดสถานี BTS ที่คุณให้มา
+# 📌 Dictionary พิกัดสถานี BTS
 bts_line = {
     # ===== Sukhumvit Line =====
     "คูคต": [13.9607, 100.6256],
@@ -172,7 +172,6 @@ def load_and_prepare_data():
     df_places = pd.read_csv('bangkok_places_bus_spot.csv')
     df_accessibility = pd.read_csv('BTS for wheelchair users spreadsheet - BTS green line.csv')
     
-    # 📌 สร้าง DataFrame df_stations จาก bts_line Dict โดยตรง
     bts_list = []
     for name, coords in bts_line.items():
         bts_list.append({'clean_name': name.strip(), 'lat': coords[0], 'lng': coords[1]})
@@ -186,10 +185,8 @@ def load_and_prepare_data():
             target_bus_file = matched_files[0]
             
     df_bus_routes = pd.read_csv(target_bus_file)
-    
     df_accessibility['clean_name'] = df_accessibility['สถานี'].str.replace('สถานี', '').str.strip()
     
-    # Merge ข้อมูลสิ่งอำนวยความสะดวกเข้ากับพิกัดจาก bts_line
     df_bts_master = pd.merge(
         df_accessibility[['clean_name', 'สถานี', 'มีลิฟต์', 'ทางลาดสำหรับรถเข็น']], 
         df_stations[['clean_name', 'lat', 'lng']], 
@@ -198,31 +195,26 @@ def load_and_prepare_data():
     
     return df_places, df_bts_master, df_bus_routes
 
-# ─── AREA 4: AI SPECIFIC MODEL TRAINING ENGINE (TRAIN ON THE FLY) ───────────
+df_places, df_bts_master, df_bus_routes = load_and_prepare_data()
+
+# ─── AREA 4: AI SPECIFIC MODEL TRAINING ENGINE ───────────────────────────────
 @st.cache_resource
 def train_ai_accessibility_classifier():
-    """
-    สร้างและสอนโครงข่ายสมองกล AI (Random Forest) เพื่อประเมินความเป็นไปได้เชิงสวัสดิภาพ
-    Features Input: [มีลิฟต์ (0/1), มีทางลาด (0/1), ระยะทางเดินเท้ารวม (เมตร), รหัสหมวดการเดินทาง]
-    Target Output: ระดับความเหมาะสมสากล (1 = เส้นทางปลอดภัยผ่านเกณฑ์, 0 = ควรระวังระดับสูง)
-    """
     np.random.seed(42)
     sample_size = 400
     
-    # จำลองโปรไฟล์พฤติกรรมการจำแนกตามมาตรฐานอารยสถาปัตย์
     sim_lift = np.random.choice([0, 1], size=sample_size, p=[0.25, 0.75])
     sim_ramp = np.random.choice([0, 1], size=sample_size, p=[0.20, 0.80])
     sim_dist = np.random.uniform(30, 2600, size=sample_size)
     sim_mode = np.random.choice(['BTS', 'BUS', 'VAN'], size=sample_size)
     
-    # กำหนดความสัมพันธ์พื้นฐานเพื่อให้ AI เรียนรู้สถิติความเหมาะสมของมนุษย์
     sim_labels = []
     for i in range(sample_size):
         score = 1.0
         if sim_lift[i] == 0: score -= 0.4
         if sim_ramp[i] == 0: score -= 0.3
-        if sim_dist[i] > 300: score -= 0.15  # เริ่มเข็นวีลแชร์เหนื่อย
-        if sim_dist[i] > 1000: score -= 0.25 # ระยะทางเสี่ยงสำหรับทางเท้าไทย
+        if sim_dist[i] > 300: score -= 0.15
+        if sim_dist[i] > 1000: score -= 0.25
         if sim_dist[i] > 1800: score -= 0.20
         sim_labels.append(1 if score >= 0.5 else 0)
         
@@ -237,7 +229,6 @@ def train_ai_accessibility_classifier():
     le = LabelEncoder()
     df_train['Travel_Mode_enc'] = le.fit_transform(df_train['Travel_Mode'])
     
-    # สั่งประมวลผลฝึกสอนตัวแบบเชิงเลขเฉพาะทาง
     features = ['Has_Lift', 'Has_Ramp', 'Pedestrian_Dist', 'Travel_Mode_enc']
     model = RandomForestClassifier(n_estimators=80, max_depth=5, random_state=42)
     model.fit(df_train[features], df_train['Safety_Label'])
@@ -280,7 +271,6 @@ bus_translation_dict = {
     "Chatuchak Park": ["BTSหมอชิต", "ห้าแยกลาดพร้าว"]
 }
 
-# คำนวณเพื่อจัดทำข้อความแสดงผลสายรถเมล์และบีทีเอสในตัวเลือก Dropdown
 display_names_th_with_brackets = []
 for idx, row in df_places.iterrows():
     p_name = row['place_name']
@@ -341,49 +331,111 @@ travel_mode = st.sidebar.radio(
 )
 
 is_hospital = any(keyword in end_place_name.lower() for keyword in ["hospital", "โรงพยาบาล", "รพ."])
-matched_lines = []
 
-# ─── AREA 7: DASHBOARD WEB PRESENTATION ─────────────────────────────────────
-# ─── AREA 7: DASHBOARD WEB PRESENTATION ─────────────────────────────────────
-col1, col2 = st.columns([1.1, 1.9])
-
-# คำนวณสถานี BTS ที่ใกล้ที่สุดล่วงหน้า
+# คำนวณ BTS สถานีที่ใกล้ที่สุดล่วงหน้า
 df_bts_master['dist_start'] = [haversine_distance(start_info['latitude'], start_info['longitude'], r['lat'], r['lng']) for i, r in df_bts_master.iterrows()]
 nearest_bts_start = df_bts_master.sort_values(by='dist_start').iloc[0]
 
 df_bts_master['dist_end'] = [haversine_distance(end_info['latitude'], end_info['longitude'], r['lat'], r['lng']) for i, r in df_bts_master.iterrows()]
 nearest_bts_end = df_bts_master.sort_values(by='dist_end').iloc[0]
 
-# ตัวแปรกลางสำหรับส่งให้ AI Predict
+# ─── AREA 7: HELPER FUNCTION FOR BTS ROUTE ──────────────────────────────────
+def get_bts_polyline(start_station, end_station):
+    sukhumvit_line = [
+        "คูคต", "แยก คปอ.", "พิพิธภัณฑ์กองทัพอากาศ", "โรงพยาบาลภูมิพลอดุลยเดช", "สะพานใหม่", 
+        "สายหยุด", "พหลโยธิน 59", "วัดพระศรีมหาธาตุ", "กรมทหารราบที่ 11", "บางบัว", 
+        "กรมป่าไม้", "มหาวิทยาลัยเกษตรศาสตร์", "เสนานิคม", "รัชโยธิน", "พหลโยธิน 24", 
+        "ห้าแยกลาดพร้าว", "หมอชิต", "สะพานควาย", "อารีย์", "สนามเป้า", "อนุสาวรีย์ชัยสมรภูมิ", 
+        "พญาไท", "ราชเทวี", "สยาม", "ชิดลม", "เพลินจิต", "นานา", "อโศก", "พร้อมพงษ์", 
+        "ทองหล่อ", "เอกมัย", "พระโขนง", "อ่อนนุช", "บางจาก", "ปุณณวิถี", "อุดมสุข", 
+        "บางนา", "แบริ่ง", "สำโรง", "ปู่เจ้า", "ช้างเอราวัณ", "โรงเรียนนายเรือ", "ปากน้ำ", 
+        "ศรีนครินทร์", "แพรกษา", "สายลวด", "เคหะฯ"
+    ]
+
+    silom_line = [
+        "สนามกีฬาแห่งชาติ", "สยาม", "ราชดำริ", "ศาลาแดง", "ช่องนนทรี", "เซนต์หลุยส์", 
+        "สุรศักดิ์", "สะพานตากสิน", "กรุงธนบุรี", "วงเวียนใหญ่", "โพธิ์นิมิตร", "ตลาดพลู", 
+        "วุฒากาศ", "บางหว้า"
+    ]
+
+    def get_path_in_single_line(line, start, end):
+        s = line.index(start)
+        e = line.index(end)
+        if s <= e:
+            return line[s:e+1]
+        else:
+            return line[e:s+1][::-1]
+
+    path = []
+    if start_station in sukhumvit_line and end_station in sukhumvit_line:
+        path = get_path_in_single_line(sukhumvit_line, start_station, end_station)
+    elif start_station in silom_line and end_station in silom_line:
+        path = get_path_in_single_line(silom_line, start_station, end_station)
+    elif start_station in sukhumvit_line and end_station in silom_line:
+        leg1 = get_path_in_single_line(sukhumvit_line, start_station, "สยาม")
+        leg2 = get_path_in_single_line(silom_line, "สยาม", end_station)
+        path = leg1 + leg2[1:]
+    elif start_station in silom_line and end_station in sukhumvit_line:
+        leg1 = get_path_in_single_line(silom_line, start_station, "สยาม")
+        leg2 = get_path_in_single_line(sukhumvit_line, "สยาม", end_station)
+        path = leg1 + leg2[1:]
+
+    if not path:
+        return [bts_line.get(start_station), bts_line.get(end_station)]
+
+    return [bts_line[st] for st in path if st in bts_line]
+
+# ─── AREA 8: DASHBOARD WEB PRESENTATION ─────────────────────────────────────
+col1, col2 = st.columns([1.1, 1.9])
+
+# สร้างตัวแปร Folium Map กลางก่อนสร้างองค์ประกอบย่อย
+m = folium.Map(
+    location=[(start_info['latitude'] + end_info['latitude'])/2, (start_info['longitude'] + end_info['longitude'])/2],
+    zoom_start=13,
+    tiles='CartoDB Positron'
+)
+
+folium.Marker([start_info['latitude'], start_info['longitude']], popup=f"ต้นทาง: {start_label_th.split(' (')[0]}", icon=folium.Icon(color='orange', icon='user', prefix='fa')).add_to(m)
+folium.Marker([end_info['latitude'], end_info['longitude']], popup=f"ปลายทาง: {end_label_th.split(' (')[0]}", icon=folium.Icon(color='red', icon='flag', prefix='fa')).add_to(m)
+
+matched_lines = []
 dynamic_has_lift = 1
 dynamic_has_ramp = 1
 dynamic_ped_dist = 0.0
 dynamic_mode_str = 'BTS'
 
 with col1:
-    st.markdown(f"### 📊 แผนผังนำทางอัจฉริยะ")
+    st.markdown("### 📊 แผนผังนำทางอัจฉริยะ")
     st.write(f"**จาก:** {start_label_th.split(' (')[0]}")
     st.write(f"**ถึง:** {end_label_th.split(' (')[0]}")
     st.write("---")
 
     # 🚇 โหมด 1: รถไฟฟ้า BTS
-    if "🚇" in travel_mode or (not matched_lines and "🚌" in travel_mode):
+    if "🚇" in travel_mode:
         dynamic_mode_str = 'BTS'
         dynamic_ped_dist = float(nearest_bts_start['dist_start'] + nearest_bts_end['dist_end'])
-        
-        lift_start = str(nearest_bts_start['มีลิฟต์']).strip() in ['1', 'มี', 'TRUE', 'True']
-        lift_end = str(nearest_bts_end['มีลิฟต์']).strip() in ['1', 'มี', 'TRUE', 'True']
-        ramp_start = str(nearest_bts_start['ทางลาดสำหรับรถเข็น']).strip() in ['1', 'มี', 'TRUE', 'True']
-        ramp_end = str(nearest_bts_end['ทางลาดสำหรับรถเข็น']).strip() in ['1', 'มี', 'TRUE', 'True']
-        
-        dynamic_has_lift = 1 if (lift_start and lift_end) else 0
-        dynamic_has_ramp = 1 if (ramp_start and ramp_end) else 0
+        dynamic_has_lift = 1 if (str(nearest_bts_start['มีลิฟต์']).strip() in ['1','มี'] and str(nearest_bts_end['มีลิฟต์']).strip() in ['1','มี']) else 0
+        dynamic_has_ramp = 1 if (str(nearest_bts_start['ทางลาดสำหรับรถเข็น']).strip() in ['1','มี'] and str(nearest_bts_end['ทางลาดสำหรับรถเข็น']).strip() in ['1','มี']) else 0
 
         st.markdown(f"""
-        * **🟢 ช่วงที่ 1:** เดินทางไปยัง **สถานี BTS {nearest_bts_start['clean_name']}** ({nearest_bts_start['dist_start']:.1f} เมตร)
+        **📋 ขั้นตอนการเดินทาง:**
+        * **🟢 ช่วงที่ 1:** มุ่งหน้าไปยัง **สถานี BTS {nearest_bts_start['clean_name']}** ({nearest_bts_start['dist_start']:.1f} ม.)
         * **🔵 ช่วงที่ 2:** นั่งรถไฟฟ้า BTS จากสถานี **{nearest_bts_start['clean_name']}** ไปยังสถานี **{nearest_bts_end['clean_name']}**
-        * **🔴 ช่วงที่ 3:** มุ่งหน้าสู่ **{end_label_th.split(' (')[0]}** ({nearest_bts_end['dist_end']:.1f} เมตร)
+        * **🔴 ช่วงที่ 3:** มุ่งหน้าไปยัง **{end_label_th.split(' (')[0]}** ({nearest_bts_end['dist_end']:.1f} ม.)
         """)
+
+        # วาดพิกัดบนแผนที่ m
+        folium.Marker([nearest_bts_start['lat'], nearest_bts_start['lng']], popup=f"BTS: {nearest_bts_start['clean_name']}", icon=folium.Icon(color='blue', icon='train', prefix='fa')).add_to(m)
+        folium.Marker([nearest_bts_end['lat'], nearest_bts_end['lng']], popup=f"BTS: {nearest_bts_end['clean_name']}", icon=folium.Icon(color='blue', icon='train', prefix='fa')).add_to(m)
+        
+        leg1_route = get_open_route_coordinates(start_info['latitude'], start_info['longitude'], nearest_bts_start['lat'], nearest_bts_start['lng'], mode="foot")
+        folium.PolyLine(leg1_route, color='#2ecc71', weight=5, dash_array='5, 5', tooltip="ทางเดินเท้าเข้าสถานี").add_to(m)
+        
+        rail_coords = get_bts_polyline(nearest_bts_start['clean_name'], nearest_bts_end['clean_name'])
+        folium.PolyLine(rail_coords, color="#2980b9", weight=8, tooltip="เส้นทางระบบรถไฟฟ้า BTS").add_to(m)
+        
+        leg3_route = get_open_route_coordinates(nearest_bts_end['lat'], nearest_bts_end['lng'], end_info['latitude'], end_info['longitude'], mode="foot")
+        folium.PolyLine(leg3_route, color='#e74c3c', weight=5, dash_array='5, 5', tooltip="ทางเดินเท้าเข้าจุดเป้าหมาย").add_to(m)
 
     # 🚌 โหมด 2: รถเมล์ชานต่ำ
     elif "🚌" in travel_mode:
@@ -392,7 +444,7 @@ with col1:
         dynamic_has_ramp = 1
         dynamic_ped_dist = 220.0
 
-        st.markdown("#### 🚏 ผลคำนวณการเดินรถโดยสารอารยสถาปัตย์")
+        st.markdown("#### 𚏏 ผลคำนวณการเดินรถโดยสารอารยสถาปัตย์")
         
         start_keywords = bus_translation_dict.get(start_place_name, [start_place_name])
         end_keywords = bus_translation_dict.get(end_place_name, [end_place_name])
@@ -410,11 +462,35 @@ with col1:
             st.markdown(f"""
             **📋 ขั้นตอนการเดินทาง:**
             1. **🚶 จุดขึ้นรถ:** ไปยังป้ายหยุดรถประจำทาง ณ **{start_label_th.split(' (')[0]}**
-            2. **💳 การขึ้นรถ:** ขึ้นรถเมล์สาย **{all_suggested_lines}**
-            3. **🏁 จุดหมาย:** ลงรถ ณ **{end_label_th.split(' (')[0]}**
+            2. **💳 การขึ้นรถ:** ขึ้นรถเมล์สาย **{all_suggested_lines}** (ตัวรถชานต่ำ มีแรมป์ระบบไฮโดรลิก)
+            3. **🏁 จุดหมาย:** ลงรถ ณ จุดจอดเป้าหมาย **{end_label_th.split(' (')[0]}**
             """)
+
+            bus_route_coordinates = get_open_route_coordinates(start_info['latitude'], start_info['longitude'], end_info['latitude'], end_info['longitude'], mode="car")
+            folium.PolyLine(bus_route_coordinates, color='#8e44ad', weight=6, tooltip="เส้นทางบริการขนส่งสาธารณะตามโครงข่ายถนนจริง").add_to(m)
         else:
-            st.warning("🔄 ไม่พบสายรถเมล์ต่อเดียว --- ระบบจัดแผนเชื่อมต่อพ่วงระบบรถไฟฟ้าให้ทดแทน")
+            st.warning("🔄 ไม่พบสายรถเมล์ต่อเดียว --- ระบบจัดแผนเชื่อมต่อพ่วงระบบรถไฟฟ้าให้ทดแทน:")
+            dynamic_mode_str = 'BTS'
+            dynamic_ped_dist = float(nearest_bts_start['dist_start'] + nearest_bts_end['dist_end'])
+            dynamic_has_lift = 1 if (str(nearest_bts_start['มีลิฟต์']).strip() in ['1','มี'] and str(nearest_bts_end['มีลิฟต์']).strip() in ['1','มี']) else 0
+            
+            st.markdown(f"""
+            * **🟢 ช่วงที่ 1:** มุ่งหน้าไปยัง **สถานี BTS {nearest_bts_start['clean_name']}** ({nearest_bts_start['dist_start']:.1f} ม.)
+            * **🔵 ช่วงที่ 2:** นั่งรถไฟฟ้า BTS จากสถานี **{nearest_bts_start['clean_name']}** ไปยังสถานี **{nearest_bts_end['clean_name']}**
+            * **🔴 ช่วงที่ 3:** เข้าสู่พิกัดเป้าหมายปลายทาง **{end_label_th.split(' (')[0]}** ({nearest_bts_end['dist_end']:.1f} ม.)
+            """)
+
+            folium.Marker([nearest_bts_start['lat'], nearest_bts_start['lng']], popup=f"BTS: {nearest_bts_start['clean_name']}", icon=folium.Icon(color='blue', icon='train', prefix='fa')).add_to(m)
+            folium.Marker([nearest_bts_end['lat'], nearest_bts_end['lng']], popup=f"BTS: {nearest_bts_end['clean_name']}", icon=folium.Icon(color='blue', icon='train', prefix='fa')).add_to(m)
+            
+            leg1_route = get_open_route_coordinates(start_info['latitude'], start_info['longitude'], nearest_bts_start['lat'], nearest_bts_start['lng'], mode="foot")
+            folium.PolyLine(leg1_route, color='#2ecc71', weight=5, dash_array='5, 5', tooltip="ทางเดินเท้าเข้าสถานี").add_to(m)
+            
+            rail_coords = get_bts_polyline(nearest_bts_start['clean_name'], nearest_bts_end['clean_name'])
+            folium.PolyLine(rail_coords, color="#2980b9", weight=8, tooltip="เส้นทางระบบรถไฟฟ้า BTS").add_to(m)
+            
+            leg3_route = get_open_route_coordinates(nearest_bts_end['lat'], nearest_bts_end['lng'], end_info['latitude'], end_info['longitude'], mode="foot")
+            folium.PolyLine(leg3_route, color='#e74c3c', weight=5, dash_array='5, 5', tooltip="ทางเดินเท้าเข้าจุดเป้าหมาย").add_to(m)
 
     # 🏥 โหมด 3: สวัสดิการรถตู้รัฐฟรี
     elif "🏥" in travel_mode:
@@ -426,75 +502,45 @@ with col1:
         if is_hospital:
             st.warning("🏥 **ยืนยันสิทธิ์รับสวัสดิการรถสถานพยาบาลสำเร็จ**")
             st.markdown("""
-            * 📞 **บริการรถตู้ กทม.:** โทร. **1555** หรือ **1479**
-            * 🚑 **บริการรถรับส่ง สปสช.:** โทร. **1330**
+            * 📞 **บริการรถตู้ กทม.:** นัดหมายล่วงหน้าที่สายด่วน **โทร. 1555** หรือ **1479**
+            * 🚑 **บริการรถรับส่ง สปสช.:** ติดต่อสายด่วน **โทร. 1330**
             """)
         else:
             st.error("❌ เงื่อนไขไม่ตรงตามเกณฑ์สวัสดิการ")
+            st.write(f"จำกัดสิทธิ์เฉพาะการเดินทางไป **โรงพยาบาล** เท่านั้น ปัจจุบันเลือกเป็น *{end_label_th.split(' (')[0]}*")
 
-    # 🧠 AI Safety Assessment
+        van_route_coordinates = get_open_route_coordinates(start_info['latitude'], start_info['longitude'], end_info['latitude'], end_info['longitude'], mode="car")
+        folium.PolyLine(van_route_coordinates, color='#e67e22', weight=6, tooltip="เส้นทางบริการรถรับส่งสวัสดิการฟรี").add_to(m)
+
+    # 🧠 AREA 9: SPECIFIC AI ASSESSMENT PROCESSOR
     st.markdown("---")
-    st.markdown("### 🧠 AI Route Safety Assessment")
+    st.markdown("### 🧠 AI Route Safety Assessment (Machine Learning)")
     try:
         encoded_mode = ai_le.transform([dynamic_mode_str])[0] if dynamic_mode_str in ai_le.classes_ else ai_le.transform(['BTS'])[0]
+        
         input_vector = pd.DataFrame([[dynamic_has_lift, dynamic_has_ramp, dynamic_ped_dist, encoded_mode]], columns=ai_features)
         
         ai_prediction = ai_model.predict(input_vector)[0]
         ai_probabilities = ai_model.predict_proba(input_vector)[0]
         
         if ai_prediction == 1:
-            st.success(f"🟢 **AI Status: APPROVED**\n\nความมั่นใจความปลอดภัย: {ai_probabilities[1] * 100:.1f}%")
+            st.success(f"🟢 **AI Status: APPROVED (แนะนำให้ใช้เส้นทางนี้)**\n\nคะแนนความมั่นใจความปลอดภัยของแบบจำลอง: {ai_probabilities[1] * 100:.1f}%")
         else:
-            st.error(f"🔴 **AI Status: WARNING**\n\nความเสี่ยง: {ai_probabilities[0] * 100:.1f}%")
+            st.error(f"🔴 **AI Status: WARNING (พบความเสี่ยงในจุดสัญจร)**\n\nดัชนีชี้วัดความน่าจะเป็นเสี่ยงภัย: {ai_probabilities[0] * 100:.1f}%\n\n*ข้อแนะนำเพิ่มเติม: โปรดตรวจสอบระบบลิฟต์ประจำสถานีหรือพิจารณาเปลี่ยนไปใช้ยานพาหนะเสริมทางเลือก*")
             
-        with st.expander("🔬 ดูกลไกพิจารณาน้ำหนักแบบจำลอง"):
+        with st.expander("🔬 ดูกลไกพิจารณาน้ำหนักแบบจำลอง (Feature Importance)"):
             importance_df = pd.DataFrame({
-                'ตัวแปรประเมิน': ['การเข้าถึงลิฟต์', 'การเข้าถึงทางลาด', 'ระยะเข็นทางเดินเท้ารวม', 'โหมดคมนาคมหลัก'],
-                'น้ำหนัก (Importance)': ai_model.feature_importances_
-            }).sort_values(by='น้ำหนัก (Importance)', ascending=False)
+                'ตัวแปรประเมิน (Features)': ['การเข้าถึงลิฟต์', 'การเข้าถึงทางลาด', 'ระยะเข็นทางเดินเท้ารวม', 'โหมดคมนาคมหลัก'],
+                'น้ำหนักการตัดสินใจ (Importance Weight)': ai_model.feature_importances_
+            }).sort_values(by='น้ำหนักการตัดสินใจ (Importance Weight)', ascending=False)
             st.dataframe(importance_df, use_container_width=True)
             
     except Exception as ai_error:
-        st.caption(f"⚠️ ระบบประมวลผล AI ขัดข้อง: {ai_error}")
+        st.caption(f"⚠️ ระบบประมวลผลโมเดล AI ขัดข้องชั่วคราว: {ai_error}")
 
 with col2:
     st.markdown("### 🗺️ OpenRoute Engine GIS Canvas")
-    
-    # สร้าง Map Object
-    m = folium.Map(
-        location=[(start_info['latitude'] + end_info['latitude'])/2, (start_info['longitude'] + end_info['longitude'])/2], 
-        zoom_start=13, 
-        tiles='CartoDB Positron'
-    )
-    
-    # ปักหมุด ต้นทาง - ปลายทาง
-    folium.Marker([start_info['latitude'], start_info['longitude']], popup=f"ต้นทาง: {start_label_th.split(' (')[0]}", icon=folium.Icon(color='orange', icon='user', prefix='fa')).add_to(m)
-    folium.Marker([end_info['latitude'], end_info['longitude']], popup=f"ปลายทาง: {end_label_th.split(' (')[0]}", icon=folium.Icon(color='red', icon='flag', prefix='fa')).add_to(m)
-    
-    # วาดเส้นทางบนแผนที่
-    if "🚇" in travel_mode or (not matched_lines and "🚌" in travel_mode):
-        folium.Marker([nearest_bts_start['lat'], nearest_bts_start['lng']], popup=f"BTS: {nearest_bts_start['clean_name']}", icon=folium.Icon(color='blue', icon='train', prefix='fa')).add_to(m)
-        folium.Marker([nearest_bts_end['lat'], nearest_bts_end['lng']], popup=f"BTS: {nearest_bts_end['clean_name']}", icon=folium.Icon(color='blue', icon='train', prefix='fa')).add_to(m)
-        
-        # 🟢 Leg 1: ทางเท้า (เดินไป BTS ต้นทาง) ผ่าน OpenRoute
-        leg1_route = get_open_route_coordinates(start_info['latitude'], start_info['longitude'], nearest_bts_start['lat'], nearest_bts_start['lng'], mode="foot")
-        folium.PolyLine(leg1_route, color='#2ecc71', weight=5, dash_array='5, 5', tooltip="ทางเดินเท้าเข้าสถานี").add_to(m)
-        
-        # 🔵 Leg 2: เส้นทางราง BTS (วิ่งตามสถานีจริงผ่าน get_bts_polyline)
-        rail_coords = get_bts_polyline(nearest_bts_start['clean_name'], nearest_bts_end['clean_name'])
-        folium.PolyLine(rail_coords, color='#2980b9', weight=7, tooltip="เส้นทางระบบรถไฟฟ้า BTS").add_to(m)
-        
-        # 🔴 Leg 3: ทางเท้า (จาก BTS ปลายทาง ไปจุดหมาย) ผ่าน OpenRoute
-        leg3_route = get_open_route_coordinates(nearest_bts_end['lat'], nearest_bts_end['lng'], end_info['latitude'], end_info['longitude'], mode="foot")
-        folium.PolyLine(leg3_route, color='#e74c3c', weight=5, dash_array='5, 5', tooltip="ทางเดินเท้าเข้าจุดเป้าหมาย").add_to(m)
-        
-    else:
-        # 🟣 โหมดถนน/รถเมล์ (ดึงเส้นทางถนนจริงผ่าน OpenRoute)
-        bus_route_coordinates = get_open_route_coordinates(start_info['latitude'], start_info['longitude'], end_info['latitude'], end_info['longitude'], mode="car")
-        folium.PolyLine(bus_route_coordinates, color='#8e44ad', weight=6, tooltip="เส้นทางขนส่งสาธารณะตามถนนจริง").add_to(m)
-
     st_folium(m, width="100%", height=580)
-
     # 🧠 AREA 8: SPECIFIC AI ASSESSMENT PROCESSOR (REPLACED IF-ELSE DECISION)
     st.markdown("---")
     st.markdown("### 🧠 AI Route Safety Assessment (Machine Learning)")
