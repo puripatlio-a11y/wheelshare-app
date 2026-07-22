@@ -85,8 +85,7 @@ def haversine_distance(lat1, lon1, lat2, lon2):
 # 📡 ดึงพิกัดโครงข่ายถนนจริงผ่าน OpenRoute (OSRM API)
 def get_open_route_coordinates(start_lat, start_lon, end_lat, end_lon, mode="foot"):
     profile = "foot" if mode == "foot" else "car"
-    url = f"http://router.project-osrm.org/route/v1/{profile}/{start_lon},{start_lat};{end_lon},{end_lat}?overview=full&geometries=geojson"
-    try:
+    url = f"https://router.project-osrm.org/route/v1/{profile}/{start_lon},{start_lat};{end_lon},{end_lat}?overview=full&geometries=geojson"    try:
         response = requests.get(url, timeout=5)
         if response.status_code == 200:
             data = response.json()
