@@ -344,6 +344,62 @@ is_hospital = any(keyword in end_place_name.lower() for keyword in ["hospital", 
 matched_lines = []
 
 # ─── AREA 7: DASHBOARD WEB PRESENTATION ─────────────────────────────────────
+# ─── FUNCTION: GET BTS POLYLINE THROUGH STATIONS ─────────────────────────────
+def get_bts_polyline(start_station, end_station):
+    # ลำดับสถานีสายสุขุมวิท (คูคต - เคหะฯ)
+    sukhumvit_line = [
+        "คูคต", "แยก คปอ.", "พิพิธภัณฑ์กองทัพอากาศ", "โรงพยาบาลภูมิพลอดุลยเดช", "สะพานใหม่", 
+        "สายหยุด", "พหลโยธิน 59", "วัดพระศรีมหาธาตุ", "กรมทหารราบที่ 11", "บางบัว", 
+        "กรมป่าไม้", "มหาวิทยาลัยเกษตรศาสตร์", "เสนานิคม", "รัชโยธิน", "พหลโยธิน 24", 
+        "ห้าแยกลาดพร้าว", "หมอชิต", "สะพานควาย", "อารีย์", "สนามเป้า", "อนุสาวรีย์ชัยสมรภูมิ", 
+        "พญาไท", "ราชเทวี", "สยาม", "ชิดลม", "เพลินจิต", "นานา", "อโศก", "พร้อมพงษ์", 
+        "ทองหล่อ", "เอกมัย", "พระโขนง", "อ่อนนุช", "บางจาก", "ปุณณวิถี", "อุดมสุข", 
+        "บางนา", "แบริ่ง", "สำโรง", "ปู่เจ้า", "ช้างเอราวัณ", "โรงเรียนนายเรือ", "ปากน้ำ", 
+        "ศรีนครินทร์", "แพรกษา", "สายลวด", "เคหะฯ"
+    ]
+
+    # ลำดับสถานีสายสีลม (สนามกีฬาแห่งชาติ - บางหว้า)
+    silom_line = [
+        "สนามกีฬาแห่งชาติ", "สยาม", "ราชดำริ", "ศาลาแดง", "ช่องนนทรี", "เซนต์หลุยส์", 
+        "สุรศักดิ์", "สะพานตากสิน", "กรุงธนบุรี", "วงเวียนใหญ่", "โพธิ์นิมิตร", "ตลาดพลู", 
+        "วุฒากาศ", "บางหว้า"
+    ]
+
+    def get_path_in_single_line(line, start, end):
+        s = line.index(start)
+        e = line.index(end)
+        if s <= e:
+            return line[s:e+1]
+        else:
+            return line[e:s+1][::-1]
+
+    path = []
+
+    # กรณีที่ 1: ทั้งสองสถานีอยู่ในสายสุขุมวิท
+    if start_station in sukhumvit_line and end_station in sukhumvit_line:
+        path = get_path_in_single_line(sukhumvit_line, start_station, end_station)
+
+    # กรณีที่ 2: ทั้งสองสถานีอยู่ในสายสีลม
+    elif start_station in silom_line and end_station in silom_line:
+        path = get_path_in_single_line(silom_line, start_station, end_station)
+
+    # กรณีที่ 3: เดินทางข้ามสาย (ต้องผ่านจุดเชื่อมต่อ สถานีสยาม)
+    elif start_station in sukhumvit_line and end_station in silom_line:
+        leg1 = get_path_in_single_line(sukhumvit_line, start_station, "สยาม")
+        leg2 = get_path_in_single_line(silom_line, "สยาม", end_station)
+        path = leg1 + leg2[1:]  # ตัด "สยาม" ซ้ำออก
+
+    elif start_station in silom_line and end_station in sukhumvit_line:
+        leg1 = get_path_in_single_line(silom_line, start_station, "สยาม")
+        leg2 = get_path_in_single_line(sukhumvit_line, "สยาม", end_station)
+        path = leg1 + leg2[1:]
+
+    # Fallback: ถ้าค้นไม่พบสถานี ให้ลากเส้นตรงระหว่าง 2 จุด
+    if not path:
+        return [bts_line.get(start_station), bts_line.get(end_station)]
+
+    # ดึงค่าพิกัด [lat, lng] จาก bts_line Dict
+    return [bts_line[st] for st in path if st in bts_line]
 col1, col2 = st.columns([1.1, 1.9])
 
 with col1:
@@ -359,38 +415,29 @@ with col1:
     dynamic_mode_str = 'BTS'
 
     # 🚇 โหมด 1: รถไฟฟ้า BTS
-    if "🚇" in travel_mode:
-        dynamic_mode_str = 'BTS'
-        df_bts_master['dist_start'] = [haversine_distance(start_info['latitude'], start_info['longitude'], r['lat'], r['lng']) for i, r in df_bts_master.iterrows()]
-        nearest_bts_start = df_bts_master.sort_values(by='dist_start').iloc[0]
-
-        df_bts_master['dist_end'] = [haversine_distance(end_info['latitude'], end_info['longitude'], r['lat'], r['lng']) for i, r in df_bts_master.iterrows()]
-        nearest_bts_end = df_bts_master.sort_values(by='dist_end').iloc[0]
-
-        transport_first_leg = "🚶 เข็นวีลแชร์เดินเท้า" if nearest_bts_start['dist_start'] <= 150 else "🚖 แนะนำเรียกใช้บริการ แกร็บ (Grab) หรือ แท็กซี่"
-        transport_last_leg = "🚶 เข็นวีลแชร์เดินเท้า" if nearest_bts_end['dist_end'] <= 150 else "🚖 แนะนำเรียกใช้บริการ แกร็บ (Grab) หรือ แท็กซี่"
-
-        has_lift_start = "มี" if str(nearest_bts_start['มีลิฟต์']).strip() in ['1', '1.0', 'มี', 'Yes'] else "ไม่มี"
-        has_ramp_start = "มี" if str(nearest_bts_start['ทางลาดสำหรับรถเข็น']).strip() in ['1', '1.0', 'มี', 'Yes'] else "ไม่มี"
+   if "🚇" in travel_mode or (not matched_lines and "🚌" in travel_mode):
+        folium.Marker([nearest_bts_start['lat'], nearest_bts_start['lng']], popup=f"BTS: {nearest_bts_start['clean_name']}", icon=folium.Icon(color='blue', icon='train', prefix='fa')).add_to(m)
+        folium.Marker([nearest_bts_end['lat'], nearest_bts_end['lng']], popup=f"BTS: {nearest_bts_end['clean_name']}", icon=folium.Icon(color='blue', icon='train', prefix='fa')).add_to(m)
         
-        has_lift_end = "มี" if str(nearest_bts_end['มีลิฟต์']).strip() in ['1', '1.0', 'มี', 'Yes'] else "ไม่มี"
-        has_ramp_end = "มี" if str(nearest_bts_end['ทางลาดสำหรับรถเข็น']).strip() in ['1', '1.0', 'มี', 'Yes'] else "ไม่มี"
-
-        # ผูกตัวแปรเชิงปริมาณจริงเพื่อนำไปคำนวณผ่านปัญญาประดิษฐ์
-        dynamic_has_lift = 1 if (has_lift_start == "มี" and has_lift_end == "มี") else 0
-        dynamic_has_ramp = 1 if (has_ramp_start == "มี" and has_ramp_end == "มี") else 0
-        dynamic_ped_dist = float(nearest_bts_start['dist_start'] + nearest_bts_end['dist_end'])
-
-        st.info(f"**🟢 ขั้นที่ 1:** {transport_first_leg} ไปยัง **สถานีรถไฟฟ้า BTS {nearest_bts_start['clean_name']}** (ระยะทาง {nearest_bts_start['dist_start']:.1f} เมตร)")
-        st.write(f"* มีลิฟต์วีลแชร์ = **{has_lift_start}** | มีทางลาด = **{has_ramp_start}**")
-        st.write("")
-
-        if nearest_bts_start['clean_name'] != nearest_bts_end['clean_name']:
-            st.info(f"**🔵 ขั้นที่ 2:** เดินทางด้วยระบบรางจากสถานี **{nearest_bts_start['clean_name']}** ไปลงที่สถานีปลายทาง **{nearest_bts_end['clean_name']}**")
+        # ทางเดินเท้า leg 1
+        leg1_route = get_open_route_coordinates(start_info['latitude'], start_info['longitude'], nearest_bts_start['lat'], nearest_bts_start['lng'], mode="foot")
+        folium.PolyLine(leg1_route, color='#2ecc71', weight=5, dash_array='5, 5', tooltip="ทางเดินเท้าเข้าสถานี").add_to(m)
         
-        st.info(f"**🔴 ขั้นที่ 3:** {transport_last_leg} เข้าสู่พิกัดเป้าหมาย **{end_label_th.split(' (')[0]}** (ระยะทาง {nearest_bts_end['dist_end']:.1f} เมตร)")
-        st.write(f"* มีลิฟต์วีลแชร์ = **{has_lift_end}** | มีทางลาด = **{has_ramp_end}**")
-
+        # 📌 แทนที่เส้นตรงด้วย PolyLine วิ่งโค้งตามแนวรางสถานีจริง
+        rail_coords = get_bts_polyline(
+            nearest_bts_start['clean_name'],
+            nearest_bts_end['clean_name']
+        )
+        folium.PolyLine(
+            rail_coords,
+            color="#2980b9",
+            weight=8,
+            tooltip="เส้นทางระบบรถไฟฟ้า BTS"
+        ).add_to(m)
+        
+        # ทางเดินเท้า leg 3
+        leg3_route = get_open_route_coordinates(nearest_bts_end['lat'], nearest_bts_end['lng'], end_info['latitude'], end_info['longitude'], mode="foot")
+        folium.PolyLine(leg3_route, color='#e74c3c', weight=5, dash_array='5, 5', tooltip="ทางเดินเท้าเข้าจุดเป้าหมาย").add_to(m)
     # 🚌 โหมด 2: รถเมล์ชานต่ำ
     elif "🚌" in travel_mode:
         dynamic_mode_str = 'BUS'
