@@ -130,62 +130,83 @@ BTS_GRAPH = {
 }
 
 # ─── 2. HELPER FUNCTIONS & GRAPH ALGORITHMS ──────────────────────────────
-def find_bts_path(start_station, end_station):
-    """ค้นหาเส้นทางวิ่งของ BTS ผ่าน Graph โดยการค้นหาแบบ BFS"""
-    if start_station == end_station:
-        return [start_station]
+elif mode_code == "bts":
+        # คำนวณหาสถานี BTS ต้นทางและปลายทางที่ใกล้จุด Origin/Destination ที่สุด
+        df_bts_master["dist_s"] = [haversine_distance(start_info["latitude"], start_info["longitude"], r["lat"], r["lng"]) for i, r in df_bts_master.iterrows()]
+        df_bts_master["dist_e"] = [haversine_distance(end_info["latitude"], end_info["longitude"], r["lat"], r["lng"]) for i, r in df_bts_master.iterrows()]
+        
+        bts_s = df_bts_master.sort_values("dist_s").iloc[0]
+        bts_e = df_bts_master.sort_values("dist_e").iloc[0]
 
-    queue = deque([[start_station]])
-    visited = set([start_station])
+        bts_start_name = bts_s["clean_name"]
+        bts_end_name = bts_e["clean_name"]
 
-    while queue:
-        path = queue.popleft()
-        node = path[-1]
+        # ค้นหาเส้นทางบน Network Graph ผ่าน BFS
+        station_path = find_bts_path(bts_start_name, bts_end_name)
 
-        for neighbor in BTS_GRAPH.get(node, []):
-            if neighbor not in visited:
-                new_path = list(path)
-                new_path.append(neighbor)
-                if neighbor == end_station:
-                    return new_path
-                visited.add(neighbor)
-                queue.append(new_path)
-    return []
+        # 2.1 Leg 1: เดินจากจุดเริ่มต้น -> สถานีขึ้น BTS (ใช้ถนนจริง OSRM)
+        leg1_coords, leg1_dist, leg1_time = get_osrm_route(start_info["latitude"], start_info["longitude"], bts_s["lat"], bts_s["lng"], mode="foot")
+        
+        # 2.2 Leg 2: พิกัดสถานีบนราง
+        bts_route_coords = [BTS_STATIONS[name] for name in station_path]
+        num_stations = max(0, len(station_path) - 1)
+        bts_time_sec = num_stations * 150  # เฉลี่ย 2.5 นาทีต่อสถานี
+        
+        bts_dist_m = 0
+        for i in range(len(bts_route_coords) - 1):
+            bts_dist_m += haversine_distance(bts_route_coords[i][0], bts_route_coords[i][1], bts_route_coords[i+1][0], bts_route_coords[i+1][1])
 
-def haversine_distance(lat1, lon1, lat2, lon2):
-    lat1, lon1, lat2, lon2 = map(np.radians, [lat1, lon1, lat2, lon2])
-    dlat = lat2 - lat1
-    dlon = lon2 - lon1
-    a = np.sin(dlat / 2.0) ** 2 + np.cos(lat1) * np.cos(lat2) * np.sin(dlon / 2.0) ** 2
-    c = 2 * np.arcsin(np.sqrt(a))
-    return 6367 * c * 1000  # ระยะทางในหน่วยเมตร
+        # 2.3 Leg 3: เดินจากสถานีลง BTS -> จุดหมายปลายทาง (ใช้ถนนจริง OSRM)
+        leg3_coords, leg3_dist, leg3_time = get_osrm_route(bts_e["lat"], bts_e["lng"], end_info["latitude"], end_info["longitude"], mode="foot")
 
-def get_osrm_route(start_lat, start_lon, end_lat, end_lon, mode="driving"):
-    """ ดึงพิกัดโครงข่ายถนนจริง, ระยะทาง (เมตร), เวลา (วินาที) จาก OSRM Engine """
-    profile = "foot" if mode == "foot" else "car"
-    url = f"https://router.project-osrm.org/route/v1/{profile}/{start_lon},{start_lat};{end_lon},{end_lat}?overview=full&geometries=geojson"
+        total_dist_m = leg1_dist + bts_dist_m + leg3_dist
+        total_time_sec = leg1_time + bts_time_sec + leg3_time
 
-    try:
-        res = requests.get(url, timeout=4)
-        if res.status_code == 200:
-            data = res.json()
-            if data.get("routes"):
-                route_data = data["routes"][0]
-                coords = [[c[1], c[0]] for c in route_data["geometry"]["coordinates"]]
-                dist_m = route_data["distance"]
-                duration_sec = route_data["duration"]
+        # --- วาดเส้นทางบนแผนที่ ---
+        # 1. เส้นทางเดินเท้าจริง (Leg 1 & Leg 3)
+        folium.PolyLine(leg1_coords, color="#34A853", weight=6, tooltip="เดินเท้าไปสถานี BTS").add_to(m)
+        folium.PolyLine(leg3_coords, color="#EA4335", weight=6, tooltip="เดินเท้าไปยังจุดหมาย").add_to(m)
 
-                if mode == "ambulance":
-                    duration_sec *= 0.6  # รถพยาบาลฉุกเฉินวิ่งเร็วกว่าปกติ 40%
-                return coords, dist_m, duration_sec
-    except Exception:
-        pass
+        # 2. เส้นทางราง BTS (ใช้เส้นประเพื่อสื่อว่าเป็น Transit Line ไม่ใช่ทางเดินเท้า)
+        folium.PolyLine(
+            bts_route_coords, 
+            color="#0F9D58", 
+            weight=4, 
+            opacity=0.8, 
+            dash_array="8, 8", 
+            tooltip=f"แนวเส้นทาง BTS ({num_stations} สถานี)"
+        ).add_to(m)
 
-    # Fallback กรณี OSRM ล่ม
-    direct_dist = haversine_distance(start_lat, start_lon, end_lat, end_lon)
-    speed_kmh = 30 if mode == "driving" else (55 if mode == "ambulance" else 4)
-    duration_sec = (direct_dist / 1000) / speed_kmh * 3600
-    return [[start_lat, start_lon], [end_lat, end_lon]], direct_dist, duration_sec
+        # 3. แสดง Node สถานีรายทาง
+        for st_name in station_path:
+            pos = BTS_STATIONS[st_name]
+            is_interchange = st_name == "สยาม"
+            folium.CircleMarker(
+                location=pos,
+                radius=7 if is_interchange else 4,
+                popup=f"สถานี {st_name} {'(จุดเปลี่ยนสาย Interchange)' if is_interchange else ''}",
+                color="red" if is_interchange else "#0F9D58",
+                fill=True,
+                fill_opacity=1,
+            ).add_to(m)
+
+        folium.Marker([bts_s["lat"], bts_s["lng"]], popup=f"ขึ้นสถานี: {bts_s['clean_name']}", icon=folium.Icon(color="blue", icon="train", prefix="fa")).add_to(m)
+        folium.Marker([bts_e["lat"], bts_e["lng"]], popup=f"ลงสถานี: {bts_e['clean_name']}", icon=folium.Icon(color="blue", icon="train", prefix="fa")).add_to(m)
+
+        # Display Card Summary
+        st.markdown(f"""
+        <div class="time-card">
+            <div class="time-main">⏱️ {int(total_time_sec//60)} นาที</div>
+            <div class="dist-sub">🚇 BTS {bts_start_name} ➔ {bts_end_name} ({num_stations} สถานี)</div>
+        </div>
+        """, unsafe_allow_html=True)
+        
+        st.success(f"✅ **ลำดับสถานีที่ผ่าน ({len(station_path)} สถานี):**\n\n" + " ➔ ".join(station_path))
+        st.info(f"""
+        * 🟢 **เดินเท้า/เข็นไปสถานีต้นทาง:** {bts_start_name} ({leg1_dist:.0f} เมตร) - *วาดเส้นตามถนนจริง*
+        * 🛗 **สิ่งอำนวยความสะดวก:** มีลิฟต์และทางลาดรองรับรถเข็น
+        * 🔴 **เดินเท้า/เข็นจากสถานีปลายทาง:** {bts_end_name} ไปจุดหมาย ({leg3_dist:.0f} เมตร) - *วาดเส้นตามถนนจริง*
+        """)
 
 # ─── 3. DATA LOADING & AI MODEL TRAINING ──────────────────────────────────
 @st.cache_data
