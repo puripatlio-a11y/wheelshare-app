@@ -352,8 +352,8 @@ st.markdown("""
 
 st.markdown("""
 <div class="gmap-header">
-    <div class="gmap-title">🗺️ AI Accessibility Google Maps & BTS Graph Navigation</div>
-    <span style="color: #5f6368; font-size: 0.95rem;">ระบบคำนวณเส้นทางอัจฉริยะ รองรับ รถไฟฟ้า BTS (ค้นหาด้วย BFS Graph Network + เวลารอ/เปลี่ยนสาย), รถเมล์ชานต่ำ (จำลองป้ายจอด), ทางเดินเท้า และรถพยาบาลฉุกเฉิน</span>
+    <div class="gmap-title">AI Accessibility Route Planner for Wheelchair Users</div>
+    <span style="color: #5f6368; font-size: 0.95rem;">ระบบส่งเสริมการวางแผนการเดินทางด้วยปัญญาประดิษฐ์สำหรับผู้ใช้รถเข็น</span>
 </div>
 """, unsafe_allow_html=True)
 
