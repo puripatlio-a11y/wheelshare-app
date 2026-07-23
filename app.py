@@ -367,15 +367,15 @@ with c2:
 start_info = df_places[df_places["place_name"] == start_place].iloc[0]
 end_info = df_places[df_places["place_name"] == end_place].iloc[0]
 
-st.write("**🚗 เลือกโหมดการเดินทาง (Travel Mode Selector):**")
+st.write("**เลือกโหมดการเดินทาง (Travel Mode Selector):**")
 mode_choice = st.radio(
     label="เลือกรูปแบบการเดินทาง",
     options=[
-        "🚗 ขับรถ/แท็กซี่",
-        "🚇 รถไฟฟ้า BTS (Graph Navigation)",
-        "🚌 รถเมล์ชานต่ำ (Low-Floor Bus)",
-        "🚶 เดินเข็น (Wheelchair/Walk)",
-        "🚑 รถพยาบาลฉุกเฉิน (Ambulance Fast-Track)"
+        "ขับรถ/แท็กซี่",
+        "รถไฟฟ้า BTS (Graph Navigation)",
+        "รถเมล์ชานต่ำ (Low-Floor Bus)",
+        "เดินเข็น (Wheelchair/Walk)",
+        "รถพยาบาลฉุกเฉิน (Ambulance Fast-Track)"
     ],
     horizontal=True,
     label_visibility="collapsed"
@@ -506,9 +506,9 @@ with col_left:
         st.success(f"✅ **ลำดับสถานีที่ผ่าน ({len(station_path)} สถานี):**\n\n" + " ➔ ".join(station_path))
 
         breakdown_lines = [
-            f"* 🟢 **เดินเท้า/เข็นไปสถานีต้นทาง:** {bts_start_name} ({leg1_dist:.0f} เมตร, {int(leg1_time//60)} นาที) - *ตามทางเท้าถนนจริง*",
-            f"* ⏳ **เวลารอรถไฟฟ้าเฉลี่ย:** ~{BTS_AVERAGE_WAIT_SEC//60} นาที",
-            f"* 🚇 **เวลาวิ่งบนขบวน:** ~{bts_running_time_sec//60} นาที ({num_stations} สถานี)",
+            f"* **เดินเท้า/เข็นไปสถานีต้นทาง:** {bts_start_name} ({leg1_dist:.0f} เมตร, {int(leg1_time//60)} นาที) - *ตามทางเท้าถนนจริง*",
+            f"* **เวลารอรถไฟฟ้าเฉลี่ย:** ~{BTS_AVERAGE_WAIT_SEC//60} นาที",
+            f"* **เวลาวิ่งบนขบวน:** ~{bts_running_time_sec//60} นาที ({num_stations} สถานี)",
         ]
         if is_transfer:
             breakdown_lines.append(f"* 🔁 **เวลาเปลี่ยนสายที่สถานีสยาม:** +{bts_interchange_sec//60} นาที (เดินข้ามชานชาลา/รอขบวนใหม่)")
@@ -556,9 +556,9 @@ with col_left:
         """, unsafe_allow_html=True)
 
         st.warning(f"""
-        * 🚌 **สายรถเมล์ชานต่ำแนะนำ:** สาย 8, 28, 515, 1-36 (Thai Smile Bus 100%)
-        * ⏳ **เวลารอรถเมล์เฉลี่ย:** ~{BUS_AVERAGE_WAIT_SEC//60} นาที (ความถี่ต่ำกว่ารถไฟฟ้า)
-        * 🛑 **เวลาจอดรับ-ส่งที่ป้ายระหว่างทาง:** ~{dwell_total_sec//60} นาที ({num_bus_stops} ป้าย x {BUS_DWELL_TIME_SEC} วินาที)
+        * **สายรถเมล์ชานต่ำแนะนำ:** สาย 8, 28, 515, 1-36 (Thai Smile Bus 100%)
+        * **เวลารอรถเมล์เฉลี่ย:** ~{BUS_AVERAGE_WAIT_SEC//60} นาที (ความถี่ต่ำกว่ารถไฟฟ้า)
+        * **เวลาจอดรับ-ส่งที่ป้ายระหว่างทาง:** ~{dwell_total_sec//60} นาที ({num_bus_stops} ป้าย x {BUS_DWELL_TIME_SEC} วินาที)
         * ♿ **อารยสถาปัตย์:** มีทางลาดระบบไฮโดรลิกปรับลาดเอียงเทียบฟุตบาทได้สะดวก
         """)
 
