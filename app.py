@@ -129,6 +129,31 @@ BTS_GRAPH = {
     "บางหว้า": ["วงเวียนใหญ่"],
 }
 
+# เส้นแบ่งสาย ใช้เพื่อตรวจจับจุดเปลี่ยนสาย (Interchange) ที่สถานีสยาม
+SUKHUMVIT_LINE_STATIONS = {
+    "คูคต", "แยก คปอ.", "พิพิธภัณฑ์กองทัพอากาศ", "โรงพยาบาลภูมิพลอดุลยเดช", "สะพานใหม่",
+    "สายหยุด", "พหลโยธิน 59", "วัดพระศรีมหาธาตุ", "กรมทหารราบที่ 11", "บางบัว",
+    "กรมป่าไม้", "มหาวิทยาลัยเกษตรศาสตร์", "เสนานิคม", "รัชโยธิน", "พหลโยธิน 24",
+    "ห้าแยกลาดพร้าว", "หมอชิต", "สะพานควาย", "อารีย์", "สนามเป้า",
+    "อนุสาวรีย์ชัยสมรภูมิ", "พญาไท", "ราชเทวี", "สยาม", "ชิดลม", "เพลินจิต",
+    "นานา", "อโศก", "พร้อมพงษ์", "ทองหล่อ", "เอกมัย", "พระโขนง", "อ่อนนุช",
+    "บางจาก", "ปุณณวิถี", "อุดมสุข", "บางนา", "แบริ่ง", "สำโรง",
+}
+SILOM_LINE_STATIONS = {
+    "สยาม", "สนามกีฬาแห่งชาติ", "ราชดำริ", "ศาลาแดง", "ช่องนนทรี", "เซนต์หลุยส์",
+    "สุรศักดิ์", "สะพานตากสิน", "กรุงธนบุรี", "วงเวียนใหญ่", "บางหว้า",
+}
+
+# ─── ค่าคงที่เวลาเดินทาง (BTS / รถเมล์) ────────────────────────────────────
+BTS_AVERAGE_WAIT_SEC = 240        # เวลารอรถไฟฟ้าเฉลี่ย ~4 นาที (ช่วงเวลาให้บริการปกติ)
+BTS_INTERCHANGE_TIME_SEC = 300    # เวลาเดิน+รอเปลี่ยนสายที่สถานีสยาม ~5 นาที
+BTS_TIME_PER_STATION_SEC = 120    # เวลาวิ่งเฉลี่ยระหว่างสถานี ~2 นาที
+
+BUS_STOP_INTERVAL_M = 700         # ระยะห่างป้ายรถเมล์จำลองโดยเฉลี่ย
+BUS_DWELL_TIME_SEC = 25           # เวลาจอดรับ-ส่งผู้โดยสารต่อป้าย
+BUS_AVERAGE_WAIT_SEC = 480        # เวลารอรถเมล์เฉลี่ย ~8 นาที (ความถี่รถเมล์ต่ำกว่า BTS)
+BUS_TRAFFIC_FACTOR = 1.25         # ปัจจัยหน่วงเวลาจากสภาพจราจร/การจอดข้างทาง
+
 # ─── 2. HELPER FUNCTIONS & GRAPH ALGORITHMS ──────────────────────────────
 def haversine_distance(lat1, lon1, lat2, lon2):
     """คำนวณระยะทางตามเส้นโค้งโลก (เมตร)"""
@@ -156,6 +181,47 @@ def find_bts_path(start_station, end_station):
                     return new_path
                 queue.append(new_path)
     return [start_station, end_station]
+
+def has_real_interchange(path):
+    """
+    ตรวจสอบว่าเส้นทาง BTS ต้องเปลี่ยนสายจริงที่สถานีสยามหรือไม่
+    (ต้องเดินทางจากสายสุขุมวิทข้ามไปสายสีลม หรือกลับกัน)
+    """
+    if "สยาม" not in path:
+        return False
+    idx = path.index("สยาม")
+
+    def line_of(station):
+        in_suk = station in SUKHUMVIT_LINE_STATIONS
+        in_sil = station in SILOM_LINE_STATIONS
+        if in_suk and not in_sil:
+            return "SUK"
+        if in_sil and not in_suk:
+            return "SIL"
+        return None  # สถานีร่วม (สยามเอง) หรือไม่พบ
+
+    before_line = line_of(path[idx - 1]) if idx > 0 else None
+    after_line = line_of(path[idx + 1]) if idx < len(path) - 1 else None
+    return bool(before_line and after_line and before_line != after_line)
+
+def simulate_bus_stops(coords, interval_m=BUS_STOP_INTERVAL_M):
+    """
+    จำลองตำแหน่งป้ายรถเมล์ตลอดแนวเส้นทางถนน โดยวางป้ายทุกๆ ระยะ interval_m เมตร
+    แทนการใช้เส้นทางรถยนต์ OSRM แบบตรงๆ โดยไม่มีจุดจอดกลางทาง
+    """
+    if len(coords) < 2:
+        return list(coords)
+    stops = [coords[0]]
+    acc = 0.0
+    for i in range(1, len(coords)):
+        seg_dist = haversine_distance(coords[i-1][0], coords[i-1][1], coords[i][0], coords[i][1])
+        acc += seg_dist
+        if acc >= interval_m:
+            stops.append(coords[i])
+            acc = 0.0
+    if stops[-1] != coords[-1]:
+        stops.append(coords[-1])
+    return stops
 
 def get_osrm_route(lat1, lon1, lat2, lon2, mode="driving"):
     """ดึงข้อมูล Routing จาก OSRM API (รองรับ driving, foot, ambulance)"""
@@ -198,7 +264,7 @@ def load_data():
         bts_list.append({"clean_name": k, "lat": v[0], "lng": v[1]})
         if f"BTS {k}" not in df_places["place_name"].values:
             df_places = pd.concat([
-                df_places, 
+                df_places,
                 pd.DataFrame([{"place_name": f"BTS {k}", "latitude": v[0], "longitude": v[1]}])
             ], ignore_index=True)
 
@@ -217,19 +283,22 @@ def train_ai_model():
     ramp = np.random.choice([0, 1], size=n, p=[0.1, 0.9])
     dist = np.random.uniform(50, 3000, size=n)
     mode = np.random.choice(["BTS", "BUS", "CAR", "AMBULANCE", "WALK"], size=n)
+    # สภาพป้ายรถเมล์ / ความหนาแน่นบริเวณป้าย (1 = ดี/ไม่แออัด, 0 = แออัด/ไม่มีสิ่งอำนวยความสะดวก)
+    bus_cond = np.random.choice([0, 1], size=n, p=[0.3, 0.7])
 
     labels = []
     for i in range(n):
         s = 1.0
         if mode[i] == "WALK" and dist[i] > 600: s -= 0.5
         if lift[i] == 0 or ramp[i] == 0: s -= 0.4
+        if mode[i] == "BUS" and bus_cond[i] == 0: s -= 0.3  # ป้ายรถเมล์แออัด/ไม่มีสิ่งอำนวยความสะดวก = เสี่ยงขึ้น
         labels.append(1 if s >= 0.5 else 0)
 
-    df = pd.DataFrame({"Lift": lift, "Ramp": ramp, "Dist": dist, "Mode": mode, "Safety": labels})
+    df = pd.DataFrame({"Lift": lift, "Ramp": ramp, "Dist": dist, "Mode": mode, "BusCond": bus_cond, "Safety": labels})
     le = LabelEncoder()
     df["Mode_enc"] = le.fit_transform(df["Mode"])
 
-    features = ["Lift", "Ramp", "Dist", "Mode_enc"]
+    features = ["Lift", "Ramp", "Dist", "Mode_enc", "BusCond"]
     model = RandomForestClassifier(n_estimators=100, max_depth=5, random_state=42)
     model.fit(df[features], df["Safety"])
     return model, le, features
@@ -284,7 +353,7 @@ st.markdown("""
 st.markdown("""
 <div class="gmap-header">
     <div class="gmap-title">🗺️ AI Accessibility Google Maps & BTS Graph Navigation</div>
-    <span style="color: #5f6368; font-size: 0.95rem;">ระบบคำนวณเส้นทางอัจฉริยะ รองรับ รถไฟฟ้า BTS (ค้นหาด้วย BFS Graph Network), รถเมล์ชานต่ำ, ทางเดินเท้า และรถพยาบาลฉุกเฉิน</span>
+    <span style="color: #5f6368; font-size: 0.95rem;">ระบบคำนวณเส้นทางอัจฉริยะ รองรับ รถไฟฟ้า BTS (ค้นหาด้วย BFS Graph Network + เวลารอ/เปลี่ยนสาย), รถเมล์ชานต่ำ (จำลองป้ายจอด), ทางเดินเท้า และรถพยาบาลฉุกเฉิน</span>
 </div>
 """, unsafe_allow_html=True)
 
@@ -318,6 +387,9 @@ elif "🚌" in mode_choice: mode_code = "bus"
 elif "🚶" in mode_choice: mode_code = "foot"
 else: mode_code = "ambulance"
 
+# ค่าเริ่มต้นของสภาพป้ายรถเมล์ (ใช้กับ AI Safety Model เฉพาะโหมดรถเมล์)
+bus_cond_value = 1
+
 st.write("---")
 
 # ─── 6. MAIN DASHBOARD & MAP DISPLAY ─────────────────────────────────────
@@ -341,7 +413,7 @@ with col_left:
     if mode_code == "driving":
         coords, total_dist_m, total_time_sec = get_osrm_route(start_info["latitude"], start_info["longitude"], end_info["latitude"], end_info["longitude"], mode="driving")
         folium.PolyLine(coords, color="#4285F4", weight=7, opacity=0.8, tooltip="เส้นทางขับรถ").add_to(m)
-        
+
         st.markdown(f"""
         <div class="time-card">
             <div class="time-main">⏱️ {int(total_time_sec//60)} นาที</div>
@@ -350,11 +422,11 @@ with col_left:
         """, unsafe_allow_html=True)
         st.info("💡 **คำแนะนำรถเข็น:** แนะนำเรียก GrabCar+ / SUV เพื่อพับเก็บรถเข็นไว้ท้ายรถได้อย่างสะดวกสบาย")
 
-    # 2. โหมด BTS (ปรับปรุงให้ดึงเส้นทางเลี้ยวตามถนนจริง)
+    # 2. โหมด BTS (เพิ่มเวลารอรถ + เวลาเปลี่ยนสายที่สถานีสยาม)
     elif mode_code == "bts":
         df_bts_master["dist_s"] = [haversine_distance(start_info["latitude"], start_info["longitude"], r["lat"], r["lng"]) for i, r in df_bts_master.iterrows()]
         df_bts_master["dist_e"] = [haversine_distance(end_info["latitude"], end_info["longitude"], r["lat"], r["lng"]) for i, r in df_bts_master.iterrows()]
-        
+
         bts_s = df_bts_master.sort_values("dist_s").iloc[0]
         bts_e = df_bts_master.sort_values("dist_e").iloc[0]
 
@@ -362,6 +434,7 @@ with col_left:
         bts_end_name = bts_e["clean_name"]
 
         station_path = find_bts_path(bts_start_name, bts_end_name)
+        is_transfer = has_real_interchange(station_path)
 
         # Leg 1: เดินเข็นไปสถานีขึ้น BTS (ใช้ถนนจริง OSRM)
         leg1_coords, leg1_dist, leg1_time = get_osrm_route(start_info["latitude"], start_info["longitude"], bts_s["lat"], bts_s["lng"], mode="foot")
@@ -381,12 +454,12 @@ with col_left:
                 seg_coords, seg_dist, _ = get_osrm_route(pos_curr[0], pos_curr[1], pos_next[0], pos_next[1], mode="driving")
                 bts_total_dist_m += seg_dist
                 all_bts_road_coords.extend(seg_coords)
-            
+
             folium.PolyLine(
-                all_bts_road_coords, 
-                color="#0F9D58", 
-                weight=7, 
-                opacity=0.85, 
+                all_bts_road_coords,
+                color="#0F9D58",
+                weight=7,
+                opacity=0.85,
                 tooltip=f"แนวเส้นทาง BTS ({len(station_path)-1} สถานี)"
             ).add_to(m)
 
@@ -395,14 +468,22 @@ with col_left:
         folium.PolyLine(leg3_coords, color="#EA4335", weight=6, tooltip="เดินเท้าไปยังจุดหมาย").add_to(m)
 
         num_stations = max(0, len(station_path) - 1)
-        bts_time_sec = num_stations * 120  # 2 นาทีต่อสถานี
+        bts_running_time_sec = num_stations * BTS_TIME_PER_STATION_SEC
+        bts_interchange_sec = BTS_INTERCHANGE_TIME_SEC if is_transfer else 0
+
         total_dist_m = leg1_dist + bts_total_dist_m + leg3_dist
-        total_time_sec = leg1_time + bts_time_sec + leg3_time
+        total_time_sec = (
+            leg1_time
+            + BTS_AVERAGE_WAIT_SEC
+            + bts_running_time_sec
+            + bts_interchange_sec
+            + leg3_time
+        )
 
         # หมุดสถานี BTS
         for st_name in station_path:
             pos = BTS_STATIONS[st_name]
-            is_interchange = st_name == "สยาม"
+            is_interchange = (st_name == "สยาม") and is_transfer
             folium.CircleMarker(
                 location=pos,
                 radius=8 if is_interchange else 5,
@@ -418,30 +499,66 @@ with col_left:
         st.markdown(f"""
         <div class="time-card">
             <div class="time-main">⏱️ {int(total_time_sec//60)} นาที</div>
-            <div class="dist-sub">🚇 BTS {bts_start_name} ➔ {bts_end_name} ({num_stations} สถานี)</div>
+            <div class="dist-sub">🚇 BTS {bts_start_name} ➔ {bts_end_name} ({num_stations} สถานี){' • เปลี่ยนสายที่สยาม' if is_transfer else ''}</div>
         </div>
         """, unsafe_allow_html=True)
-        
-        st.success(f"✅ **ลำดับสถานีที่ผ่าน ({len(station_path)} สถานี):**\n\n" + " ➔ ".join(station_path))
-        st.info(f"""
-        * 🟢 **เดินเท้า/เข็นไปสถานีต้นทาง:** {bts_start_name} ({leg1_dist:.0f} เมตร) - *ตามทางเท้าถนนจริง*
-        * 🛗 **สิ่งอำนวยความสะดวก:** มีลิฟต์และทางลาดรองรับรถเข็น
-        * 🔴 **เดินเท้า/เข็นจากสถานีปลายทาง:** {bts_end_name} ไปจุดหมาย ({leg3_dist:.0f} เมตร) - *ตามทางเท้าถนนจริง*
-        """)
 
-    # 3. โหมด รถเมล์ชานต่ำ
+        st.success(f"✅ **ลำดับสถานีที่ผ่าน ({len(station_path)} สถานี):**\n\n" + " ➔ ".join(station_path))
+
+        breakdown_lines = [
+            f"* 🟢 **เดินเท้า/เข็นไปสถานีต้นทาง:** {bts_start_name} ({leg1_dist:.0f} เมตร, {int(leg1_time//60)} นาที) - *ตามทางเท้าถนนจริง*",
+            f"* ⏳ **เวลารอรถไฟฟ้าเฉลี่ย:** ~{BTS_AVERAGE_WAIT_SEC//60} นาที",
+            f"* 🚇 **เวลาวิ่งบนขบวน:** ~{bts_running_time_sec//60} นาที ({num_stations} สถานี)",
+        ]
+        if is_transfer:
+            breakdown_lines.append(f"* 🔁 **เวลาเปลี่ยนสายที่สถานีสยาม:** +{bts_interchange_sec//60} นาที (เดินข้ามชานชาลา/รอขบวนใหม่)")
+        breakdown_lines.append(f"* 🛗 **สิ่งอำนวยความสะดวก:** มีลิฟต์และทางลาดรองรับรถเข็น")
+        breakdown_lines.append(f"* 🔴 **เดินเท้า/เข็นจากสถานีปลายทาง:** {bts_end_name} ไปจุดหมาย ({leg3_dist:.0f} เมตร, {int(leg3_time//60)} นาที) - *ตามทางเท้าถนนจริง*")
+        st.info("\n".join(breakdown_lines))
+
+    # 3. โหมด รถเมล์ชานต่ำ (จำลองป้ายจอดตลอดเส้นทาง + เวลารอรถเมล์)
     elif mode_code == "bus":
-        coords, total_dist_m, total_time_sec = get_osrm_route(start_info["latitude"], start_info["longitude"], end_info["latitude"], end_info["longitude"], mode="driving")
+        coords, base_dist_m, base_drive_time = get_osrm_route(start_info["latitude"], start_info["longitude"], end_info["latitude"], end_info["longitude"], mode="driving")
         folium.PolyLine(coords, color="#9C27B0", weight=7, tooltip="รถเมล์ชานต่ำ").add_to(m)
+
+        bus_stop_coords = simulate_bus_stops(coords)
+        # ป้ายกลางทาง = ไม่นับจุดต้นทาง/ปลายทางในลิสต์
+        intermediate_stops = bus_stop_coords[1:-1] if len(bus_stop_coords) > 2 else []
+        num_bus_stops = len(intermediate_stops)
+
+        for i, pt in enumerate(intermediate_stops, start=1):
+            folium.CircleMarker(
+                location=pt,
+                radius=5,
+                popup=f"ป้ายรถเมล์จำลอง #{i}",
+                color="#6A1B9A",
+                fill=True,
+                fill_opacity=0.9,
+            ).add_to(m)
+
+        # เลือกสภาพป้ายรถเมล์ปัจจุบัน (ใช้เป็น Feature ใน AI Safety Model)
+        bus_cond_choice = st.selectbox(
+            "🚏 สภาพป้ายรถเมล์บริเวณเส้นทางนี้ (Bus Stop Condition):",
+            ["ดี (มีหลังคา/ไม่แออัด)", "แออัด/ไม่มีสิ่งอำนวยความสะดวก"],
+        )
+        bus_cond_value = 1 if "ดี" in bus_cond_choice else 0
+
+        dwell_total_sec = num_bus_stops * BUS_DWELL_TIME_SEC
+        congestion_time = base_drive_time * BUS_TRAFFIC_FACTOR
+        total_time_sec = congestion_time + dwell_total_sec + BUS_AVERAGE_WAIT_SEC
+        total_dist_m = base_dist_m
 
         st.markdown(f"""
         <div class="time-card">
-            <div class="time-main">⏱️ {int((total_time_sec*1.25)//60)} นาที</div>
-            <div class="dist-sub">🚌 รถเมล์ปรับอากาศชานต่ำ (Low-Floor Bus)</div>
+            <div class="time-main">⏱️ {int(total_time_sec//60)} นาที</div>
+            <div class="dist-sub">🚌 รถเมล์ปรับอากาศชานต่ำ (Low-Floor Bus) • ผ่านป้ายจำลอง {num_bus_stops} ป้าย</div>
         </div>
         """, unsafe_allow_html=True)
-        st.warning("""
+
+        st.warning(f"""
         * 🚌 **สายรถเมล์ชานต่ำแนะนำ:** สาย 8, 28, 515, 1-36 (Thai Smile Bus 100%)
+        * ⏳ **เวลารอรถเมล์เฉลี่ย:** ~{BUS_AVERAGE_WAIT_SEC//60} นาที (ความถี่ต่ำกว่ารถไฟฟ้า)
+        * 🛑 **เวลาจอดรับ-ส่งที่ป้ายระหว่างทาง:** ~{dwell_total_sec//60} นาที ({num_bus_stops} ป้าย x {BUS_DWELL_TIME_SEC} วินาที)
         * ♿ **อารยสถาปัตย์:** มีทางลาดระบบไฮโดรลิกปรับลาดเอียงเทียบฟุตบาทได้สะดวก
         """)
 
@@ -477,7 +594,7 @@ with col_left:
     # ─── AI SAFETY MODEL ASSESSMENT ───────────────────────────────────────
     st.markdown("---")
     st.markdown("#### 🤖 AI Safety Assessment (Random Forest)")
-    
+
     # Mapping Mode ให้ตรงกับที่ Train ไว้ใน LabelEncoder
     mode_map = {
         "bts": "BTS",
@@ -488,9 +605,9 @@ with col_left:
     }
     mode_str_ai = mode_map.get(mode_code, "CAR")
     encoded_mode = ai_le.transform([mode_str_ai])[0]
-    
-    input_vector = pd.DataFrame([[1, 1, total_dist_m, encoded_mode]], columns=ai_features)
-    
+
+    input_vector = pd.DataFrame([[1, 1, total_dist_m, encoded_mode, bus_cond_value]], columns=ai_features)
+
     pred = ai_model.predict(input_vector)[0]
     prob = ai_model.predict_proba(input_vector)[0]
 
