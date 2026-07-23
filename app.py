@@ -371,10 +371,10 @@ st.write("**เลือกโหมดการเดินทาง (Travel Mo
 mode_choice = st.radio(
     label="เลือกรูปแบบการเดินทาง",
     options=[
-        "ขับรถ/แท็กซี่",
-        "รถไฟฟ้า BTS (Graph Navigation)",
-        "รถเมล์ชานต่ำ (Low-Floor Bus)",
-        "เดินเข็น (Wheelchair/Walk)",
+        "🚗 ขับรถ/แท็กซี่",
+        "🚇 รถไฟฟ้า BTS (Graph Navigation)",
+        "🚌 รถเมล์ชานต่ำ (Low-Floor Bus)",
+        "🚶 เดินเข็น (Wheelchair/Walk)",
         "รถพยาบาลฉุกเฉิน (Ambulance Fast-Track)"
     ],
     horizontal=True,
