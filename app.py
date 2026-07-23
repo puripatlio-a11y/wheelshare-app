@@ -1,4 +1,5 @@
 from collections import deque
+import math
 import os
 import warnings
 import folium
@@ -99,7 +100,6 @@ BTS_GRAPH = {
     "อนุสาวรีย์ชัยสมรภูมิ": ["สนามเป้า", "พญาไท"],
     "พญาไท": ["อนุสาวรีย์ชัยสมรภูมิ", "ราชเทวี"],
     "ราชเทวี": ["พญาไท", "สยาม"],
-    # Siam Station Node (4-Way Interchange Junction)
     "สยาม": ["ราชเทวี", "ชิดลม", "สนามกีฬาแห่งชาติ", "ราชดำริ"],
     "ชิดลม": ["สยาม", "เพลินจิต"],
     "เพลินจิต": ["ชิดลม", "นานา"],
@@ -130,105 +130,60 @@ BTS_GRAPH = {
 }
 
 # ─── 2. HELPER FUNCTIONS & GRAPH ALGORITHMS ──────────────────────────────
-# 2. โหมด BTS (ปรับปรุงให้วาดเส้นทางเลี้ยวตามถนนจริง 100%)
-    elif mode_code == "bts":
-        # คำนวณหาสถานี BTS ต้นทางและปลายทางที่ใกล้จุด Origin/Destination ที่สุด
-        df_bts_master["dist_s"] = [haversine_distance(start_info["latitude"], start_info["longitude"], r["lat"], r["lng"]) for i, r in df_bts_master.iterrows()]
-        df_bts_master["dist_e"] = [haversine_distance(end_info["latitude"], end_info["longitude"], r["lat"], r["lng"]) for i, r in df_bts_master.iterrows()]
-        
-        bts_s = df_bts_master.sort_values("dist_s").iloc[0]
-        bts_e = df_bts_master.sort_values("dist_e").iloc[0]
+def haversine_distance(lat1, lon1, lat2, lon2):
+    """คำนวณระยะทางตามเส้นโค้งโลก (เมตร)"""
+    R = 6371000  # รัศมีโลก
+    phi1, phi2 = math.radians(lat1), math.radians(lat2)
+    dphi = math.radians(lat2 - lat1)
+    dlambda = math.radians(lon2 - lon1)
+    a = math.sin(dphi/2)**2 + math.cos(phi1)*math.cos(phi2)*math.sin(dlambda/2)**2
+    return R * 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a))
 
-        bts_start_name = bts_s["clean_name"]
-        bts_end_name = bts_e["clean_name"]
+def find_bts_path(start_station, end_station):
+    """ค้นหาเส้นทาง BTS ด้วย Breadth-First Search (BFS)"""
+    if start_station == end_station:
+        return [start_station]
+    queue = deque([[start_station]])
+    visited = {start_station}
+    while queue:
+        path = queue.popleft()
+        node = path[-1]
+        for neighbor in BTS_GRAPH.get(node, []):
+            if neighbor not in visited:
+                visited.add(neighbor)
+                new_path = list(path) + [neighbor]
+                if neighbor == end_station:
+                    return new_path
+                queue.append(new_path)
+    return [start_station, end_station]
 
-        # ค้นหาเส้นทางบน Network Graph ผ่าน BFS
-        station_path = find_bts_path(bts_start_name, bts_end_name)
+def get_osrm_route(lat1, lon1, lat2, lon2, mode="driving"):
+    """ดึงข้อมูล Routing จาก OSRM API (รองรับ driving, foot, ambulance)"""
+    profile = "foot" if mode == "foot" else "driving"
+    url = f"http://router.project-osrm.org/route/v1/{profile}/{lon1},{lat1};{lon2},{lat2}?overview=full&geometries=geojson"
+    try:
+        res = requests.get(url, timeout=4).json()
+        if res.get("code") == "Ok":
+            coords = [[pt[1], pt[0]] for pt in res["routes"][0]["geometry"]["coordinates"]]
+            dist = res["routes"][0]["distance"]
+            dur = res["routes"][0]["duration"]
+            if mode == "ambulance":
+                dur *= 0.6  # รถพยาบาลวิ่งเร็วกว่าปกติ 40%
+            return coords, dist, dur
+    except Exception:
+        pass
+    # Fallback กรณี API มีปัญหา
+    fallback_coords = [[lat1, lon1], [lat2, lon2]]
+    dist = haversine_distance(lat1, lon1, lat2, lon2)
+    speed = 1.2 if mode == "foot" else 8.3  # m/s
+    return fallback_coords, dist, dist / speed
 
-        # ------------------------------------------------------------------
-        # 🟢 Leg 1: เดินเข็นจากจุดเริ่มต้น -> สถานีขึ้น BTS (ใช้ถนนจริง OSRM)
-        # ------------------------------------------------------------------
-        leg1_coords, leg1_dist, leg1_time = get_osrm_route(start_info["latitude"], start_info["longitude"], bts_s["lat"], bts_s["lng"], mode="foot")
-        folium.PolyLine(leg1_coords, color="#34A853", weight=6, tooltip="เดินเท้าไปสถานี BTS").add_to(m)
-
-        # ------------------------------------------------------------------
-        # 🚇 Leg 2: วิ่งบนราง/ถนนตามแนว BTS โดยดึงเส้นทาง OSRM เชื่อมทีละสถานี (เลี้ยวตามถนนจริง)
-        # ------------------------------------------------------------------
-        bts_total_dist_m = 0
-        all_bts_road_coords = []
-
-        if len(station_path) > 1:
-            for i in range(len(station_path) - 1):
-                st_curr = station_path[i]
-                st_next = station_path[i+1]
-                pos_curr = BTS_STATIONS[st_curr]
-                pos_next = BTS_STATIONS[st_next]
-
-                # ดึงเส้นทางถนนจริงเชื่อมระหว่างสถานีต่อสถานีผ่าน OSRM
-                seg_coords, seg_dist, _ = get_osrm_route(pos_curr[0], pos_curr[1], pos_next[0], pos_next[1], mode="driving")
-                bts_total_dist_m += seg_dist
-                
-                # รวม พิกัดถนนจริงเข้าด้วยกัน
-                all_bts_road_coords.extend(seg_coords)
-            
-            # วาดเส้นทางแนว BTS ที่เลี้ยวโค้งตามถนนจริงลงบนแผนที่
-            folium.PolyLine(
-                all_bts_road_coords, 
-                color="#0F9D58", 
-                weight=7, 
-                opacity=0.85, 
-                tooltip=f"แนวเส้นทาง BTS ({len(station_path)-1} สถานี)"
-            ).add_to(m)
-
-        # ------------------------------------------------------------------
-        # 🔴 Leg 3: เดินเข็นจากสถานีลง BTS -> จุดหมายปลายทาง (ใช้ถนนจริง OSRM)
-        # ------------------------------------------------------------------
-        leg3_coords, leg3_dist, leg3_time = get_osrm_route(bts_e["lat"], bts_e["lng"], end_info["latitude"], end_info["longitude"], mode="foot")
-        folium.PolyLine(leg3_coords, color="#EA4335", weight=6, tooltip="เดินเท้าไปยังจุดหมาย").add_to(m)
-
-        # คำนวณเวลารวม
-        num_stations = max(0, len(station_path) - 1)
-        bts_time_sec = num_stations * 120  # เวลาเฉลี่ยบนรถไฟฟ้า 2 นาที/สถานี
-        total_dist_m = leg1_dist + bts_total_dist_m + leg3_dist
-        total_time_sec = leg1_time + bts_time_sec + leg3_time
-
-        # 📍 วาด หมุด (CircleMarker) แสดงสถานี BTS รายทาง
-        for st_name in station_path:
-            pos = BTS_STATIONS[st_name]
-            is_interchange = st_name == "สยาม"
-            folium.CircleMarker(
-                location=pos,
-                radius=8 if is_interchange else 5,
-                popup=f"สถานี {st_name} {'(จุดเปลี่ยนสาย Interchange)' if is_interchange else ''}",
-                color="red" if is_interchange else "#0F9D58",
-                fill=True,
-                fill_opacity=1,
-            ).add_to(m)
-
-        folium.Marker([bts_s["lat"], bts_s["lng"]], popup=f"ขึ้นสถานี: {bts_s['clean_name']}", icon=folium.Icon(color="blue", icon="train", prefix="fa")).add_to(m)
-        folium.Marker([bts_e["lat"], bts_e["lng"]], popup=f"ลงสถานี: {bts_e['clean_name']}", icon=folium.Icon(color="blue", icon="train", prefix="fa")).add_to(m)
-
-        # สรุปข้อมูลการเดินทาง
-        st.markdown(f"""
-        <div class="time-card">
-            <div class="time-main">⏱️ {int(total_time_sec//60)} นาที</div>
-            <div class="dist-sub">🚇 BTS {bts_start_name} ➔ {bts_end_name} ({num_stations} สถานี)</div>
-        </div>
-        """, unsafe_allow_html=True)
-        
-        st.success(f"✅ **ลำดับสถานีที่ผ่าน ({len(station_path)} สถานี):**\n\n" + " ➔ ".join(station_path))
-        st.info(f"""
-        * 🟢 **เดินเท้า/เข็นไปสถานีต้นทาง:** {bts_start_name} ({leg1_dist:.0f} เมตร) - *ตามทางเท้าถนนจริง*
-        * 🛗 **สิ่งอำนวยความสะดวก:** มีลิฟต์และทางลาดรองรับรถเข็น
-        * 🔴 **เดินเท้า/เข็นจากสถานีปลายทาง:** {bts_end_name} ไปจุดหมาย ({leg3_dist:.0f} เมตร) - *ตามทางเท้าถนนจริง*
-        """)
 # ─── 3. DATA LOADING & AI MODEL TRAINING ──────────────────────────────────
 @st.cache_data
 def load_data():
     try:
         df_places = pd.read_csv("bangkok_places_bus_spot.csv")
     except Exception:
-        # Fallback dataset
         df_places = pd.DataFrame([
             {"place_name": "อนุสาวรีย์ชัยสมรภูมิ", "latitude": 13.7628, "longitude": 100.5371},
             {"place_name": "โรงพยาบาลจุฬาลงกรณ์", "latitude": 13.7314, "longitude": 100.5342},
@@ -238,11 +193,9 @@ def load_data():
             {"place_name": "โรงพยาบาลรามาธิบดี", "latitude": 13.7651, "longitude": 100.5332},
         ])
 
-    # รวมสถานที่ BTS เข้าไปใน Dataset เพื่อให้ผู้ใช้เลือกได้ง่ายขึ้น
     bts_list = []
     for k, v in BTS_STATIONS.items():
         bts_list.append({"clean_name": k, "lat": v[0], "lng": v[1]})
-        # หากสถานที่ไม่อยู่ใน df_places ให้เพิ่มเป็นตัวเลือก
         if f"BTS {k}" not in df_places["place_name"].values:
             df_places = pd.concat([
                 df_places, 
@@ -286,7 +239,6 @@ ai_model, ai_le, ai_features = train_ai_model()
 # ─── 4. CSS STYLING & HEADER ──────────────────────────────────────────────
 st.markdown("""
 <style>
-    /* Google Maps Header Toolbar */
     .gmap-header {
         background: #ffffff;
         border-radius: 12px;
@@ -304,8 +256,6 @@ st.markdown("""
         align-items: center;
         gap: 10px;
     }
-    
-    /* Route Metric Card */
     .time-card {
         background-color: #e8f0fe;
         border-radius: 10px;
@@ -324,8 +274,6 @@ st.markdown("""
         color: #5f6368;
         font-weight: 500;
     }
-
-    /* Mode Selection Highlight */
     .stRadio > div {
         flex-direction: row !important;
         gap: 10px;
@@ -380,7 +328,6 @@ m = folium.Map(
     zoom_start=13, tiles="CartoDB Positron"
 )
 
-# Marker ต้นทาง/ปลายทาง
 folium.Marker([start_info["latitude"], start_info["longitude"]], popup=f"<b>ต้นทาง:</b> {start_place}", icon=folium.Icon(color="green", icon="play", prefix="fa")).add_to(m)
 folium.Marker([end_info["latitude"], end_info["longitude"]], popup=f"<b>ปลายทาง:</b> {end_place}", icon=folium.Icon(color="red", icon="flag", prefix="fa")).add_to(m)
 
@@ -403,9 +350,8 @@ with col_left:
         """, unsafe_allow_html=True)
         st.info("💡 **คำแนะนำรถเข็น:** แนะนำเรียก GrabCar+ / SUV เพื่อพับเก็บรถเข็นไว้ท้ายรถได้อย่างสะดวกสบาย")
 
-    # 2. โหมด BTS (ใช้ BFS Graph Network ในการหาเส้นทางบนราง)
+    # 2. โหมด BTS (ปรับปรุงให้ดึงเส้นทางเลี้ยวตามถนนจริง)
     elif mode_code == "bts":
-        # คำนวณหาสถานี BTS ต้นทางและปลายทางที่ใกล้จุด Origin/Destination ที่สุด
         df_bts_master["dist_s"] = [haversine_distance(start_info["latitude"], start_info["longitude"], r["lat"], r["lng"]) for i, r in df_bts_master.iterrows()]
         df_bts_master["dist_e"] = [haversine_distance(end_info["latitude"], end_info["longitude"], r["lat"], r["lng"]) for i, r in df_bts_master.iterrows()]
         
@@ -415,34 +361,45 @@ with col_left:
         bts_start_name = bts_s["clean_name"]
         bts_end_name = bts_e["clean_name"]
 
-        # ค้นหาเส้นทางบน Network Graph ผ่าน BFS
         station_path = find_bts_path(bts_start_name, bts_end_name)
 
-        # 2.1 Leg 1: เดินจากจุดเริ่มต้น -> สถานีขึ้น BTS
+        # Leg 1: เดินเข็นไปสถานีขึ้น BTS (ใช้ถนนจริง OSRM)
         leg1_coords, leg1_dist, leg1_time = get_osrm_route(start_info["latitude"], start_info["longitude"], bts_s["lat"], bts_s["lng"], mode="foot")
-        
-        # 2.2 Leg 2: วิ่งบนราง BTS ตาม Node Path ที่หาได้จาก Graph
-        bts_route_coords = [BTS_STATIONS[name] for name in station_path]
-        num_stations = max(0, len(station_path) - 1)
-        bts_time_sec = num_stations * 150  # เฉลี่ย 2.5 นาทีต่อสถานี
-        
-        # คำนวณระยะทางรวมตามราง BTS
-        bts_dist_m = 0
-        for i in range(len(bts_route_coords) - 1):
-            bts_dist_m += haversine_distance(bts_route_coords[i][0], bts_route_coords[i][1], bts_route_coords[i+1][0], bts_route_coords[i+1][1])
+        folium.PolyLine(leg1_coords, color="#34A853", weight=6, tooltip="เดินเท้าไปสถานี BTS").add_to(m)
 
-        # 2.3 Leg 3: เดินจากสถานีลง BTS -> จุดหมายปลายทาง
+        # Leg 2: วิ่งบนแนว BTS เชื่อมทีละสถานีด้วย OSRM Road Mapping
+        bts_total_dist_m = 0
+        all_bts_road_coords = []
+
+        if len(station_path) > 1:
+            for i in range(len(station_path) - 1):
+                st_curr = station_path[i]
+                st_next = station_path[i+1]
+                pos_curr = BTS_STATIONS[st_curr]
+                pos_next = BTS_STATIONS[st_next]
+
+                seg_coords, seg_dist, _ = get_osrm_route(pos_curr[0], pos_curr[1], pos_next[0], pos_next[1], mode="driving")
+                bts_total_dist_m += seg_dist
+                all_bts_road_coords.extend(seg_coords)
+            
+            folium.PolyLine(
+                all_bts_road_coords, 
+                color="#0F9D58", 
+                weight=7, 
+                opacity=0.85, 
+                tooltip=f"แนวเส้นทาง BTS ({len(station_path)-1} สถานี)"
+            ).add_to(m)
+
+        # Leg 3: เดินเข็นจากสถานีลง BTS -> จุดหมาย (ใช้ถนนจริง OSRM)
         leg3_coords, leg3_dist, leg3_time = get_osrm_route(bts_e["lat"], bts_e["lng"], end_info["latitude"], end_info["longitude"], mode="foot")
+        folium.PolyLine(leg3_coords, color="#EA4335", weight=6, tooltip="เดินเท้าไปยังจุดหมาย").add_to(m)
 
-        total_dist_m = leg1_dist + bts_dist_m + leg3_dist
+        num_stations = max(0, len(station_path) - 1)
+        bts_time_sec = num_stations * 120  # 2 นาทีต่อสถานี
+        total_dist_m = leg1_dist + bts_total_dist_m + leg3_dist
         total_time_sec = leg1_time + bts_time_sec + leg3_time
 
-        # วาดเส้นทางบนแผนที่
-        folium.PolyLine(leg1_coords, color="#34A853", weight=5, dash_array="4, 8", tooltip="เดินไปสถานี BTS").add_to(m)
-        folium.PolyLine(bts_route_coords, color="#0F9D58", weight=8, opacity=0.9, tooltip=f"BTS Path ({num_stations} สถานี)").add_to(m)
-        folium.PolyLine(leg3_coords, color="#EA4335", weight=5, dash_array="4, 8", tooltip="เดินไปยังจุดหมาย").add_to(m)
-
-        # วาด Node สถานี BTS ที่นั่งผ่านตลอดเส้นทาง
+        # หมุดสถานี BTS
         for st_name in station_path:
             pos = BTS_STATIONS[st_name]
             is_interchange = st_name == "สยาม"
@@ -455,8 +412,8 @@ with col_left:
                 fill_opacity=1,
             ).add_to(m)
 
-        folium.Marker([bts_s["lat"], bts_s["lng"]], popup=f"ขึ้นที่สถานี: {bts_s['clean_name']}", icon=folium.Icon(color="blue", icon="train", prefix="fa")).add_to(m)
-        folium.Marker([bts_e["lat"], bts_e["lng"]], popup=f"ลงที่สถานี: {bts_e['clean_name']}", icon=folium.Icon(color="blue", icon="train", prefix="fa")).add_to(m)
+        folium.Marker([bts_s["lat"], bts_s["lng"]], popup=f"ขึ้นสถานี: {bts_s['clean_name']}", icon=folium.Icon(color="blue", icon="train", prefix="fa")).add_to(m)
+        folium.Marker([bts_e["lat"], bts_e["lng"]], popup=f"ลงสถานี: {bts_e['clean_name']}", icon=folium.Icon(color="blue", icon="train", prefix="fa")).add_to(m)
 
         st.markdown(f"""
         <div class="time-card">
@@ -465,11 +422,11 @@ with col_left:
         </div>
         """, unsafe_allow_html=True)
         
-        st.success(f"✅ **ลำดับสถานีผ่าน ({len(station_path)} สถานี):**\n\n" + " ➔ ".join(station_path))
+        st.success(f"✅ **ลำดับสถานีที่ผ่าน ({len(station_path)} สถานี):**\n\n" + " ➔ ".join(station_path))
         st.info(f"""
-        * 🟢 **เดินเข็นไปสถานีต้นทาง:** {bts_start_name} ({leg1_dist:.0f} เมตร)
+        * 🟢 **เดินเท้า/เข็นไปสถานีต้นทาง:** {bts_start_name} ({leg1_dist:.0f} เมตร) - *ตามทางเท้าถนนจริง*
         * 🛗 **สิ่งอำนวยความสะดวก:** มีลิฟต์และทางลาดรองรับรถเข็น
-        * 🔴 **ออกจากสถานีปลายทาง:** {bts_end_name} ไปจุดหมาย ({leg3_dist:.0f} เมตร)
+        * 🔴 **เดินเท้า/เข็นจากสถานีปลายทาง:** {bts_end_name} ไปจุดหมาย ({leg3_dist:.0f} เมตร) - *ตามทางเท้าถนนจริง*
         """)
 
     # 3. โหมด รถเมล์ชานต่ำ
@@ -521,8 +478,17 @@ with col_left:
     st.markdown("---")
     st.markdown("#### 🤖 AI Safety Assessment (Random Forest)")
     
-    mode_str_ai = "BTS" if mode_code == "bts" else ("BUS" if mode_code == "bus" else "CAR")
+    # Mapping Mode ให้ตรงกับที่ Train ไว้ใน LabelEncoder
+    mode_map = {
+        "bts": "BTS",
+        "bus": "BUS",
+        "driving": "CAR",
+        "ambulance": "AMBULANCE",
+        "foot": "WALK"
+    }
+    mode_str_ai = mode_map.get(mode_code, "CAR")
     encoded_mode = ai_le.transform([mode_str_ai])[0]
+    
     input_vector = pd.DataFrame([[1, 1, total_dist_m, encoded_mode]], columns=ai_features)
     
     pred = ai_model.predict(input_vector)[0]
